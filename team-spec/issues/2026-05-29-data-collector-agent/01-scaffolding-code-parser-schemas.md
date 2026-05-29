@@ -38,3 +38,10 @@ AFK（可独立执行，无需人工决策）
 - `src/collector/storage.py` 本 issue 只创建空文件，存储逻辑在 #4 实现
 - `src/collector/adapter.py` 本 issue 只创建空文件，API 调用逻辑在 #2 实现
 - 后续加 AKShare 时只需新增 `src/collector/akshare_adapter.py`，架构不用改
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-29T14:40:29Z
+- GitHub Number: 1
+- GitHub URL: https://github.com/yanheng799/financial/issues/1

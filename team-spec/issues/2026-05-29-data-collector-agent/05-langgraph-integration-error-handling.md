@@ -37,3 +37,10 @@ AFK（可独立执行，无需人工决策）
 - 本 issue 的 StateGraph 只包含 `data_collector` 一个节点，不含后续的 `market_analyzer`、`strategy_decider` 等（它们在各自的 PRD 中实现）。
 - Human-in-the-loop 节点（`human_review`）不属于数据采集 Agent 的范围，在后续 Agent 的 PRD 中实现。
 - 手工验收：用 3 只熟悉股票（600519.SH、000001.SZ、920001.BJ）跑完整流程，抽查 20 个数据点与 Tushare 网页端交叉验证。
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-29T14:40:37Z
+- GitHub Number: 5
+- GitHub URL: https://github.com/yanheng799/financial/issues/5

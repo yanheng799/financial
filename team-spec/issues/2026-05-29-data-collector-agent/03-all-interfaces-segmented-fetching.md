@@ -35,3 +35,10 @@ AFK（可独立执行，无需人工决策）
 - `daily_basic` 和 `daily` 同为日频且时间范围一致（近 1 年），分段策略一致（按半年分段），实现时可共享分段拉取逻辑。
 - `fina_indicator` 和 `income` 是季频接口，数据量小（~8 行），不需要分段。
 - Tushare `vol` 字段单位为千手，在 Pydantic schema 中标注但不转换值。
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-29T14:40:32Z
+- GitHub Number: 3
+- GitHub URL: https://github.com/yanheng799/financial/issues/3

@@ -39,3 +39,10 @@ AFK（可独立执行，无需人工决策）
 - 本 issue 只实现 `daily` 一个接口。其余 4 个接口在 #3 中加入，模式完全一致。
 - 暂不实现分段拉取（#3 加入）、暂不实现 Parquet 落盘（#4 加入）。
 - 可用 `.agents/skills/tushare/scripts/stock_data_demo.py` 中的 API 调用模式作为参考。
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-29T14:40:31Z
+- GitHub Number: 2
+- GitHub URL: https://github.com/yanheng799/financial/issues/2

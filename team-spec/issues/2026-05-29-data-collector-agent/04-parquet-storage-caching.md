@@ -41,3 +41,10 @@ AFK（可独立执行，无需人工决策）
 - `fundamental` 维度按接口拆分为 3 个子文件（daily_basic/fina_indicator/income），因为日频和季频 schema 不兼容。
 - 缓存判断逻辑：检查所有必要的 Parquet 文件是否存在。如果部分存在（如只有 daily 没有 fundamental），视为缓存不完整，按缺失维度调 API 补齐。
 - 目录不存在时自动创建（`data/daily/`、`data/fundamental/`、`data/capital/`）。
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-29T14:40:34Z
+- GitHub Number: 4
+- GitHub URL: https://github.com/yanheng799/financial/issues/4
