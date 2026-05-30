@@ -47,8 +47,22 @@ class TestPydanticSchemas:
     def test_daily_quote_data_creation(self):
         from src.collector.schemas import DailyQuoteData
 
-        data = DailyQuoteData(data=[{"ts_code": "600519.SH", "trade_date": "20260529", "close": 1850.0}])
+        row = {
+            "ts_code": "600519.SH",
+            "trade_date": "20260529",
+            "open": 1800.0,
+            "high": 1860.0,
+            "low": 1795.0,
+            "close": 1850.0,
+            "vol": 50000.0,
+            "amount": 9250000.0,
+            "source": "tushare:daily",
+            "fetched_at": "2026-05-30T10:00:00+08:00",
+            "raw_value": '{"ts_code": "600519.SH"}',
+        }
+        data = DailyQuoteData(data=[row])
         assert len(data.data) == 1
+        assert data.data[0].close == 1850.0
 
     def test_fund_data_creation(self):
         from src.collector.schemas import FundData
