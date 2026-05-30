@@ -23,13 +23,20 @@ def human_review_agent(state: AnalysisState) -> dict:
 
     从 configs/llm.yaml 读取 auto_approve 开关：
     - auto_approve=True：直接返回 human_approved=True，不中断
-    - auto_approve=False：调用 interrupt()，等待用户在 Streamlit 批准后 resume
+    - auto_approve=False 且 state 中 human_approved 已为 False：返回拒绝 + error
+    - auto_approve=False 且未审批：调用 interrupt()，等待用户在 Streamlit 批准后 resume
     """
     config = load_llm_config()
     auto_approve = config.get("auto_approve", True)
 
     if auto_approve:
         return {"human_approved": True}
+
+    if state.get("human_approved") is False:
+        return {
+            "human_approved": False,
+            "error": _make_error("human_review", "用户未批准，跳过策略分析"),
+        }
 
     msg = "请确认 technical_report，批准后继续"
     return interrupt(msg)

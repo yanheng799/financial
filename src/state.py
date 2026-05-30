@@ -1,6 +1,6 @@
 """LangGraph State 定义——所有 Agent 共享的 State 结构"""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class AnalysisState(TypedDict):
@@ -11,3 +11,4 @@ class AnalysisState(TypedDict):
     technical_report: dict
     decision_report: dict
     human_approved: bool
+    error: NotRequired[dict]
