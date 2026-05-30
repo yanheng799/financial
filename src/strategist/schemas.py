@@ -70,6 +70,7 @@ def create_llm_client():
         temperature=config["temperature"],
         max_tokens=config["max_tokens"],
         max_retries=2,
+        request_timeout=config.get("request_timeout", 300),
     )
 
 
