@@ -4,7 +4,6 @@ import re
 
 from pydantic import BaseModel, ConfigDict
 
-
 # ── Pydantic 数据模型 ────────────────────────────────────
 
 
