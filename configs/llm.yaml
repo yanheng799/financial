@@ -1,0 +1,10 @@
+# 策略决策 Agent LLM 配置
+# 使用 OpenAI 兼容协议，支持 DeepSeek / Qwen 切换
+
+provider: deepseek
+model: deepseek-chat
+base_url: https://api.deepseek.com/v1
+api_key_env: DEEPSEEK_API_KEY  # 从环境变量读取，不在此文件中写明文
+temperature: 0.1
+max_tokens: 4000
+auto_approve: true  # Phase 1 无 Streamlit 时自动通过
