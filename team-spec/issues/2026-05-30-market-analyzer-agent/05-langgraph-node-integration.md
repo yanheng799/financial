@@ -36,3 +36,34 @@ AFK（可独立执行，无需人工决策）
 - 节点函数不需要重试机制（无外部 API 调用，纯内存计算）
 - `technical_report` 写入 `AnalysisState` 后，后续策略决策 Agent 可直接从 state 读取
 - 日线、PE 分位数等计算结果需通过 `indicators` 字段透传给下游 LLM，符合"不让 LLM 碰原始数据计算"的约束
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-30T04:15:34Z
+- GitHub Number: 15
+- GitHub URL: https://github.com/yanheng799/financial/issues/15
+
+## Implementation Notes
+
+### 变更文件
+
+- `src/analyzer/node.py` — `market_analyzer_agent(state)` 节点函数 + `build_analyzer_graph()` StateGraph 构建
+- `tests/test_analyzer_node.py` — 9 个行为测试
+
+### 设计决策
+
+- 节点函数无重试机制（纯内存计算，无外部 API 调用）
+- `has_fundamental` 由 `fina_indicator` 是否非空决定，`has_capital` 由 `capital.data` 是否非空决定
+- 所有指标计算完成后合并到 `TechnicalReport.indicators`
+
+## Acceptance Criteria Coverage
+
+| AC | 测试 | 状态 |
+|---|---|---|
+| AC#1 raw_data → technical_report 含 scores + 13 键 | `test_writes_technical_report_with_scores`, `test_indicators_has_all_13_keys` | ✅ |
+| AC#2 indicators 含全部13键 | `test_indicators_has_all_13_keys` | ✅ |
+| AC#3 raw_data 为空 → 结构化错误 | `test_empty_raw_data_returns_error` | ✅ |
+| AC#4 capital insufficient → 降级 | `test_capital_insufficient_degrades` | ✅ |
+| AC#5 build_analyzer_graph 返回可 invoke | `test_build_returns_compiled_graph`, `test_graph_invoke_with_mock_data` | ✅ |
+| AC#6 PRD #1 通过 | `test_graph_invoke_with_mock_data` | ✅ |
