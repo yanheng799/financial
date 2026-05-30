@@ -31,8 +31,26 @@ AFK（可独立执行，无需人工决策）
 - `key_indicators` 保持硬编码（精选列表，非全量指标）
 - `dim_sources` 配置化后，Phase 2 加 `sentiment` 维度时只需改配置文件
 
+## Implementation Notes
+
+- `node.py`: 删除 `_extract_data_sufficient`，改为从 `schemas` import `_get_data_sufficient`（消除两个实现的分叉风险）
+- `tests/test_code_cleanup.py`: 5 个测试验证清理结果
+
+## Acceptance Criteria Coverage
+
+- [x] `node.py` 中不再存在 `_extract_data_sufficient`，改为 import `schemas._get_data_sufficient` → `test_node_no_duplicate_extract_data_sufficient`
+- [x] `build_prompt` 使用 `scores.keys()` 而非硬编码列表 → `test_node_build_prompt_uses_dynamic_dims`（已完成于 #36）
+- [x] `dim_sources` 映射可从配置文件读取 → `test_dim_sources_externalized`（已完成于 #36）
+- [x] `strategy_decider_agent` 中有注释说明两层重试分工 → `test_strategy_decider_has_retry_docs`（已完成于 #36）
+- [x] 既有测试全部通过 → 229 passed
+
+## Verification
+
+- `pytest` — 229 passed
+- `ruff check` — All checks passed
+
 ## Publish Status
 
-- Status: created
+- Status: implemented
 - GitHub Number: 37
 - GitHub URL: https://github.com/yanheng799/financial/issues/37
