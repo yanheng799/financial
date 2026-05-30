@@ -39,6 +39,32 @@ AFK（可独立执行，无需人工决策）
 - `src/collector/adapter.py` 本 issue 只创建空文件，API 调用逻辑在 #2 实现
 - 后续加 AKShare 时只需新增 `src/collector/akshare_adapter.py`，架构不用改
 
+## Implementation Notes
+
+- 实现日期：2026-05-30
+- 修改文件：`src/state.py`、`src/collector/__init__.py`、`src/collector/schemas.py`、`src/collector/adapter.py`（空文件）、`src/collector/storage.py`（空文件）、`.gitignore`
+- 测试文件：`tests/test_scaffolding.py`（20 个测试用例）
+- `adapter.py` 和 `storage.py` 为空文件占位，实现分别在 Issue #2 和 #4
+- Lint 修复：移除未使用的 `import importlib`，isort 排序修正
+
+## Acceptance Criteria Coverage
+
+- [x] `src/collector/` 目录存在，含 `__init__.py`、`adapter.py`、`schemas.py`、`storage.py` — `TestProjectStructure`
+- [x] `src/state.py` 定义 `AnalysisState` TypedDict，可被 LangGraph 使用 — `TestProjectStructure`
+- [x] `RawData` 等 Pydantic 模型可正常实例化和 `.model_dump()` — `TestPydanticSchemas`
+- [x] Given `600519` → `600519.SH` — `test_shanghai_stock`
+- [x] Given `000001` → `000001.SZ` — `test_shenzhen_zero_prefix`
+- [x] Given `920001` → `920001.BJ` — `test_beijing_stock`
+- [x] Given `600519.SH`（已带后缀） → `600519.SH` — `test_already_suffixed`
+- [x] Given `1234567`（无效） → ValueError — `test_invalid_code_raises`
+- [x] `data/` 已加入 `.gitignore` — 文件已包含
+
+## Verification
+
+- `pytest tests/test_scaffolding.py` — 20 passed
+- `ruff check src/ tests/` — All checks passed
+- `ruff format --check src/ tests/` — 7 files already formatted
+
 ## Publish Status
 
 - Status: created
