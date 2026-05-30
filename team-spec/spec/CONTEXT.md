@@ -15,7 +15,12 @@ A 股分析 Agent 系统——单人本地工具。用户输入股票代码，�
 | **DimensionScore** | 单维度评分结构：value（-2~+2）、reason（文本）、data_sufficient（数据是否充足） |
 | **TechnicalReport** | 行情分析 Agent 输出：scores（三维 DimensionScore）+ indicators（派生指标值）+ metadata |
 | **降级不阻塞** | 部分规则跳过仍可打分，维度数据缺失时才标记 `data_sufficient=False` 并归零 |
-| **策略决策 Agent** | 第三个节点，唯一使用 LLM 的节点，输入结构化评分 JSON，输出综合研判 |
+| **策略决策 Agent** | 第三、四个节点（`human_review` + `strategy_decider`），唯一使用 LLM 的节点，输入结构化评分，输出 `DecisionReport` |
+| **human_review** | Human-in-the-loop 审批节点，`auto_approve` 开关控制是否中断等待用户确认 |
+| **DecisionReport** | 策略决策 Agent 输出：三维评分回填 + 综合判断 + 冲突识别 + 强制反向因素 + 置信度 |
+| **bearish_factor** | 强制输出项：无论综合判断如何，LLM 必须输出至少一条反向风险理由 |
+| **auto_approve** | 开关：`True` 时 `human_review` 自动通过，`False` 时触发 LangGraph interrupt 等待用户 |
+| **LLM provider** | DeepSeek / Qwen，通过 `configs/llm.yaml` 切换，OpenAI 兼容 SDK 调用 |
 | **报告推送 Agent** | 第四个节点，纯代码，JSON → Streamlit 渲染 + Parquet 存档 |
 | **可追溯性三字段** | 每条数据必须携带 `source`（接口名）、`fetched_at`（拉取时间 ISO 8601）、`raw_value`（原始值） |
 | **本地优先** | 有本地 Parquet 文件就直接用，用户点"刷新数据"才调 API 重拉 |
@@ -29,9 +34,9 @@ A 股分析 Agent 系统——单人本地工具。用户输入股票代码，�
 1. LLM 只在策略决策 Agent 调用，其他三个 Agent 全部纯代码
 2. LLM 输入是代码预处理后的结构化 JSON，不让 LLM 碰原始数据计算
 3. 评分由代码计算（-2 ~ +2），不是 LLM 主观判断
-4. 置信度由维度一致性决定（高：3 维一致 / 中：2 维一致 / 低：不一致或强冲突）
-5. Phase 1 仅覆盖 A 股，仅 Tushare 数据源，仅三维评分（无情绪面）
-6. 股票代码内部格式：`600519.SH`（沪）、`000001.SZ`（深）
+4. 置信度由维度一致性决定（高：3 维一致 / 中：2 维一致 / 低：不一致或强冲突），**代码计算，非 LLM 输出**
+5. Phase 1 仅覆盖 A 股，仅 Tushare 数据源，仅三维评分（无情绪面）；`scores` 预留 `sentiment` 键标为 `deferred`
+6. Stock code format: `600519.SH`, `000001.SZ`
 7. 日期格式统一 `YYYYMMDD`
 
 ## Phase 范围

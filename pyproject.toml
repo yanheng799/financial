@@ -22,7 +22,7 @@ dependencies = [
     "pandas-ta-classic>=0.6",
     "pyyaml>=6.0",
     "openai>=1.0",
-    "langchain-openai>=0.3",
+    "langchain-openai>=1.2.2",
 ]
 
 [project.optional-dependencies]
