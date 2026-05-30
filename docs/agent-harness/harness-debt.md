@@ -14,11 +14,8 @@
 
 ## DEBT-002：`tests/` 目录不存在
 
-- **证据**：`ls tests/` 返回目录不存在
-- **影响**：pytest 配置了 `testpaths = ["tests"]`，但目录不存在。agent 实现 issue #1 时需手动创建。
-- **建议处理**：在 issue #1 实现时创建 `tests/` 目录和 `tests/__init__.py`。
-- **优先级**：P2 — issue #1 实现时自然解决
-- **建议转入 team-tech-debt-refine**：否
+- **证据**：~~`ls tests/` 返回目录不存在~~ 已解决——`tests/` 目录已创建，含 5 个测试文件（72 个测试全部通过）。
+- **状态**：**已解决**（2026-05-30）
 
 ## DEBT-003：Tushare 积分覆盖范围未知
 
@@ -30,8 +27,13 @@
 
 ## DEBT-004：`data/` 目录和 `.gitignore` 未创建
 
-- **证据**：项目根目录无 `data/` 目录，`.gitignore` 不存在
-- **影响**：issue #4（Parquet 存储）需要 `data/` 目录和 `.gitignore` 排除
-- **建议处理**：在 issue #1 实现时创建 `.gitignore` 文件并加入 `data/`，创建 `data/daily/`、`data/fundamental/`、`data/capital/` 空目录（或让 storage.py 自动创建）。
-- **优先级**：P2 — issue #1 或 #4 实现时自然解决
-- **建议转入 team-tech-debt-refine**：否
+- **证据**：~~项目根目录无 `data/` 目录，`.gitignore` 不存在~~ 已解决——`.gitignore` 已创建并排除 `data/`，`data/` 目录已存在含 Parquet 文件。
+- **状态**：**已解决**（2026-05-30）
+
+## DEBT-005：`pandas-ta` 未加入 pyproject.toml 依赖
+
+- **证据**：`pyproject.toml` 的 `dependencies` 列表中无 `pandas-ta`，且 `pip show pandas-ta` 返回未安装
+- **影响**：行情分析 Agent 的指标计算依赖 `pandas-ta`，不安装则无法实现 analyzer 模块
+- **建议处理**：在 market-analyzer issue #01 实现前，将 `pandas-ta` 加入 `pyproject.toml` 的 `dependencies` 并 `pip install pandas-ta`。安装后需验证与 Python 3.11 + pandas 2.x 的兼容性。
+- **优先级**：P1 — 阻塞行情分析 Agent issue #01
+- **建议转入 team-tech-debt-refine**：否（直接安装即可解决）

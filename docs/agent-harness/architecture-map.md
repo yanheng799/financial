@@ -23,7 +23,7 @@ data_collector ──→ market_analyzer ──→ human_review ──→ strate
 src/
 ├── state.py                 # AnalysisState（TypedDict）—— 所有 Agent 共享的 State 定义
 │
-├── collector/               # 数据采集 Agent（当前要实现的）
+├── collector/               # 数据采集 Agent（已实现）
 │   ├── __init__.py          # 导出 data_collector_agent 函数
 │   ├── adapter.py           # TushareAdapter —— Tushare API 调用封装
 │   │                        #   关键方法：fetch_daily(), fetch_daily_basic(),
@@ -31,9 +31,11 @@ src/
 │   │                        #              fetch_moneyflow(), fetch_all()
 │   ├── schemas.py           # Pydantic 数据模型
 │   │                        #   RawData, DailyQuoteData, FundData, CapitalFlowData
-│   └── storage.py           # Parquet 读写 + 缓存逻辑
+│   ├── storage.py           # Parquet 读写 + 缓存逻辑
+│   └── node.py              # LangGraph 节点函数 + StateGraph 构建
+│                            #   data_collector_agent(state), build_graph()
 │
-├── analyzer/                # 行情分析 Agent（后续）—— pandas-ta 算指标 + 三维评分
+├── analyzer/                # 行情分析 Agent（待实现）—— pandas-ta 算指标 + 三维评分
 ├── strategist/              # 策略决策 Agent（后续）—— 唯一调用 LLM 的节点
 └── publisher/               # 报告推送 Agent（后续）—— JSON → Streamlit 渲染
 ```
@@ -45,8 +47,9 @@ src/
 | `collector/adapter.py` | 调 Tushare API、返回原始数据 | 不算指标、不评分 |
 | `collector/schemas.py` | 数据结构定义和校验 | 不做业务逻辑 |
 | `collector/storage.py` | Parquet 读写和缓存判断 | 不知道数据含义 |
+| `collector/node.py` | LangGraph 节点函数、StateGraph 构建、重试和错误处理 | 不直接调 API |
 | `state.py` | State 类型定义 | 不含任何逻辑 |
-| `analyzer/`（后续） | 算技术指标 + 评分 | 不调 API、不调 LLM |
+| `analyzer/`（待实现） | 算技术指标 + 三维评分 | 不调 API、不调 LLM |
 | `strategist/`（后续） | LLM 综合推理 | 不算指标、不下单 |
 
 ## Agent 最容易误判的点
@@ -55,6 +58,8 @@ src/
 2. **评分是代码算不是 LLM 算**：所有评分函数在 `analyzer/` 中用纯代码实现，LLM 只在 `strategist/` 中做综合推理
 3. **fundamental 按接口拆子文件**：`daily_basic`（日频）、`fina_indicator`（季频）、`income`（季频）分别存为独立 Parquet，不混在一个文件里
 4. **moneyflow 可能不可用**：Tushare 积分不足时该接口返回错误，采集 Agent 应降级处理而非报错退出
+5. **YoY 字段来自 `fina_indicator` 不来自 `income`**：`tr_yoy` 和 `netprofit_yoy` 在 `fina_indicator` 接口中返回，不在 `income` 接口中
+6. **ROE 要用年化值**：`fina_indicator` 中 `roe` 是累计值，`roe_yearly` 是年化值，评分函数使用 `roe_yearly`
 
 ## 数据文件结构
 

@@ -11,7 +11,10 @@ A 股分析 Agent 系统——单人本地工具。用户输入股票代码，�
 | **分析单元** | 单票全面分析：输入一个股票代码，产出覆盖三个维度的完整分析报告 |
 | **三维评分** | 技术面（MA/MACD/成交量比）、基本面（PE/ROE/财务趋势）、资金面（净流入/流出），每维 -2 ~ +2 |
 | **数据采集 Agent** | LangGraph 流水线第一个节点，纯代码，调 Tushare API + Pydantic 校验 + Parquet 落盘 |
-| **行情分析 Agent** | 第二个节点，纯代码，pandas-ta 算指标 + 三维评分 |
+| **行情分析 Agent** | 第二个节点，纯代码，pandas-ta 算指标 + 三维评分（`score_technical/fundamental/capital`） |
+| **DimensionScore** | 单维度评分结构：value（-2~+2）、reason（文本）、data_sufficient（数据是否充足） |
+| **TechnicalReport** | 行情分析 Agent 输出：scores（三维 DimensionScore）+ indicators（派生指标值）+ metadata |
+| **降级不阻塞** | 部分规则跳过仍可打分，维度数据缺失时才标记 `data_sufficient=False` 并归零 |
 | **策略决策 Agent** | 第三个节点，唯一使用 LLM 的节点，输入结构化评分 JSON，输出综合研判 |
 | **报告推送 Agent** | 第四个节点，纯代码，JSON → Streamlit 渲染 + Parquet 存档 |
 | **可追溯性三字段** | 每条数据必须携带 `source`（接口名）、`fetched_at`（拉取时间 ISO 8601）、`raw_value`（原始值） |

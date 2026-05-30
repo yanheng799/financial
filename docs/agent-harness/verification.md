@@ -10,6 +10,8 @@
 | 新增 Tushare API 调用 | `ruff check .` + mock 测试 | `pytest` + 手工用真实 Token 跑一次 |
 | 修改存储/缓存逻辑 | `ruff check .` + 存储测试 | `pytest` + 检查 `data/` 目录文件结构 |
 | 新增 LangGraph 节点 | `ruff check .` + 节点测试 | `pytest` + 端到端跑通 StateGraph |
+| 新增评分函数 | `ruff check .` + 评分函数测试 | `pytest` + 检查所有规则分支覆盖 |
+| 新增指标计算 | `ruff check .` + mock 数据测试 | `pytest` + 验证与券商 APP 指标值一致 |
 | 修改配置文件 | 确认 `pip install -e .` 无报错 | `pytest` |
 | 修改文档 | 无自动验证 | 人工审读 |
 
