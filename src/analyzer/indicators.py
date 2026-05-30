@@ -9,7 +9,7 @@ from src.analyzer.schemas import load_scoring_config
 def compute_technical_indicators(daily_data: list[dict]) -> dict:
     """从 OHLCV 日线数据计算技术指标。"""
     if not daily_data:
-        return _empty_technical()
+        return _empty_indicators()
 
     df = pd.DataFrame(daily_data)
     df = df.sort_values("trade_date", ascending=True).reset_index(drop=True)
@@ -78,15 +78,7 @@ def compute_fundamental_indicators(fundamental_data: dict) -> dict:
 
 
 def compute_capital_indicators(capital_data: dict) -> dict:
-    """从资金流数据计算资金面指标。
-
-    Args:
-        capital_data: RawData.capital 的 model_dump() 输出，含 data（list[dict]）和 insufficient（bool）
-
-    Returns:
-        包含 net_mf_amount_5d 和 lg_buy_sell_ratio 的 dict。
-        不可计算的指标为 None。
-    """
+    """从资金流数据计算资金面指标。"""
     config = load_scoring_config()
     days = config["capital_flow"]["days"]
 
@@ -99,15 +91,12 @@ def compute_capital_indicators(capital_data: dict) -> dict:
     if not data:
         return result
 
-    # data 已按 trade_date 降序排列，取最近 N 日
     recent = data[:days]
 
-    # 净流入合计
     net_mf_values = [r.get("net_mf_amount") for r in recent if r.get("net_mf_amount") is not None]
     if len(net_mf_values) >= days:
         result["net_mf_amount_5d"] = sum(net_mf_values)
 
-    # 大单买卖比（最新 1 日）
     latest = data[0]
     buy = latest.get("buy_lg_amount")
     sell = latest.get("sell_lg_amount")
@@ -118,6 +107,7 @@ def compute_capital_indicators(capital_data: dict) -> dict:
 
 
 def _last_value(series: pd.Series | None) -> float | None:
+    """取 Series 最后一个非 NaN 值。pandas-ta 数据不足时返回 None。"""
     if series is None:
         return None
     valid = series.dropna()
@@ -127,6 +117,7 @@ def _last_value(series: pd.Series | None) -> float | None:
 
 
 def _value_at(series: pd.Series | None, pos: int) -> float | None:
+    """取 Series 指定位置的最后一个非 NaN 值"""
     if series is None:
         return None
     valid = series.dropna()
@@ -136,7 +127,7 @@ def _value_at(series: pd.Series | None, pos: int) -> float | None:
     return float(valid.iloc[idx])
 
 
-def _empty_technical() -> dict:
+def _empty_indicators() -> dict:
     return {
         "ma5": None,
         "ma20": None,

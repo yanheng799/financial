@@ -110,7 +110,6 @@ def score_capital(indicators: dict, insufficient: bool, has_data: bool) -> Dimen
     score = 0
     reasons = []
 
-    # 主力方向
     net_flow = indicators.get("net_mf_amount_5d")
     if net_flow is not None:
         if net_flow > 0:
@@ -120,7 +119,6 @@ def score_capital(indicators: dict, insufficient: bool, has_data: bool) -> Dimen
             score -= 1
             reasons.append("近5日主力净流出")
 
-    # 大单强弱
     lg_ratio = indicators.get("lg_buy_sell_ratio")
     if lg_ratio is not None:
         if lg_ratio > config["lg_ratio"]["strong"]:
