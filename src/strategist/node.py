@@ -11,6 +11,7 @@ from src.state import AnalysisState
 from src.strategist.schemas import (
     DecisionReport,
     LLMOutput,
+    _get_data_sufficient,
     build_data_sources,
     compute_confidence,
     create_llm_client,
@@ -66,12 +67,6 @@ def _fmt_val(val) -> str:
     return str(val)
 
 
-def _extract_data_sufficient(dim) -> bool:
-    if hasattr(dim, "data_sufficient"):
-        return dim.data_sufficient
-    return dim.get("data_sufficient", True)
-
-
 def _make_error(error_type: str, message: str, detail: str = "") -> dict:
     return {"error_type": error_type, "message": message, "detail": detail}
 
@@ -93,7 +88,7 @@ def build_prompt(technical_report: dict) -> str:
 
         value = dim.value if hasattr(dim, "value") else dim.get("value", 0)
         reason = dim.reason if hasattr(dim, "reason") else dim.get("reason", "")
-        sufficient = _extract_data_sufficient(dim)
+        sufficient = _get_data_sufficient(dim)
 
         conf_label = "确定性数据支撑" if sufficient else "数据不足，仅供参考"
         source = DIM_SOURCES.get(dim_key, "")
@@ -166,7 +161,7 @@ def strategy_decider_agent(state: AnalysisState) -> dict:
         return {"error": _make_error("input", "technical_report.scores 为空")}
 
     all_insufficient = all(
-        (_extract_data_sufficient(s)) is False
+        (_get_data_sufficient(s)) is False
         for s in scores.values()
     )
     if all_insufficient:
