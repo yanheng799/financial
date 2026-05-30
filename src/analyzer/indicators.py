@@ -1,25 +1,17 @@
-"""技术指标计算——MA、MACD、成交量比"""
+"""技术指标计算——MA、MACD、成交量比、基本面、资金面"""
 
 import pandas as pd
 import pandas_ta_classic as ta
 
+from src.analyzer.schemas import load_scoring_config
+
 
 def compute_technical_indicators(daily_data: list[dict]) -> dict:
-    """从 OHLCV 日线数据计算技术指标。
-
-    Args:
-        daily_data: daily 接口返回的数据行列表（list[dict]），
-                    已按 trade_date 降序排列（最新在前）
-
-    Returns:
-        包含 ma5/ma20/ma60/macd_hist/macd_hist_prev/vol_ratio 的 dict。
-        不可计算的指标值为 None。
-    """
+    """从 OHLCV 日线数据计算技术指标。"""
     if not daily_data:
         return _empty_indicators()
 
     df = pd.DataFrame(daily_data)
-    # 转为升序（最旧在前），便于计算均线
     df = df.sort_values("trade_date", ascending=True).reset_index(drop=True)
 
     close = df["close"].astype(float)
@@ -27,7 +19,6 @@ def compute_technical_indicators(daily_data: list[dict]) -> dict:
 
     result = {}
 
-    # MA
     sma5 = ta.sma(close, length=5)
     sma20 = ta.sma(close, length=20)
     sma60 = ta.sma(close, length=60)
@@ -35,7 +26,6 @@ def compute_technical_indicators(daily_data: list[dict]) -> dict:
     result["ma20"] = _last_value(sma20)
     result["ma60"] = _last_value(sma60)
 
-    # MACD
     macd_df = ta.macd(close, fast=12, slow=26, signal=9)
     if macd_df is not None and not macd_df.empty and len(macd_df) >= 2:
         hist = macd_df["MACDh_12_26_9"]
@@ -45,7 +35,6 @@ def compute_technical_indicators(daily_data: list[dict]) -> dict:
         result["macd_hist"] = None
         result["macd_hist_prev"] = None
 
-    # vol_ratio：当日 vol / 近 20 日均值
     if len(vol) >= 20:
         mean_vol = vol.iloc[-20:].mean()
         result["vol_ratio"] = round(float(vol.iloc[-1]) / mean_vol, 4) if mean_vol > 0 else None
@@ -56,16 +45,7 @@ def compute_technical_indicators(daily_data: list[dict]) -> dict:
 
 
 def compute_fundamental_indicators(fundamental_data: dict) -> dict:
-    """从估值和财务数据提取基本面指标。
-
-    Args:
-        fundamental_data: RawData.fundamental 的 model_dump() 输出，
-                          含 daily_basic、fina_indicator、income 三个 list[dict]
-
-    Returns:
-        包含 pe_ttm/pe_percentile_1y/roe_yearly/tr_yoy/netprofit_yoy 的 dict。
-        不可计算的指标为 None。
-    """
+    """从估值和财务数据提取基本面指标。"""
     result = {
         "pe_ttm": None,
         "pe_percentile_1y": None,
@@ -74,7 +54,6 @@ def compute_fundamental_indicators(fundamental_data: dict) -> dict:
         "netprofit_yoy": None,
     }
 
-    # PE_TTM 百分位（从 daily_basic）
     daily_basic = fundamental_data.get("daily_basic", [])
     if daily_basic:
         pe_values = [(r.get("trade_date", ""), r.get("pe_ttm")) for r in daily_basic if r.get("pe_ttm") is not None]
@@ -87,7 +66,6 @@ def compute_fundamental_indicators(fundamental_data: dict) -> dict:
             result["pe_ttm"] = latest_pe
             result["pe_percentile_1y"] = percentile
 
-    # 财务指标（从 fina_indicator）
     fina = fundamental_data.get("fina_indicator", [])
     if fina:
         sorted_fina = sorted(fina, key=lambda r: r.get("end_date", ""), reverse=True)
@@ -95,6 +73,35 @@ def compute_fundamental_indicators(fundamental_data: dict) -> dict:
         result["roe_yearly"] = latest.get("roe_yearly")
         result["tr_yoy"] = latest.get("tr_yoy")
         result["netprofit_yoy"] = latest.get("netprofit_yoy")
+
+    return result
+
+
+def compute_capital_indicators(capital_data: dict) -> dict:
+    """从资金流数据计算资金面指标。"""
+    config = load_scoring_config()
+    days = config["capital_flow"]["days"]
+
+    result = {
+        "net_mf_amount_5d": None,
+        "lg_buy_sell_ratio": None,
+    }
+
+    data = capital_data.get("data") or []
+    if not data:
+        return result
+
+    recent = data[:days]
+
+    net_mf_values = [r.get("net_mf_amount") for r in recent if r.get("net_mf_amount") is not None]
+    if len(net_mf_values) >= days:
+        result["net_mf_amount_5d"] = sum(net_mf_values)
+
+    latest = data[0]
+    buy = latest.get("buy_lg_amount")
+    sell = latest.get("sell_lg_amount")
+    if buy is not None and sell is not None and sell > 0:
+        result["lg_buy_sell_ratio"] = round(buy / sell, 4)
 
     return result
 
@@ -114,7 +121,7 @@ def _value_at(series: pd.Series | None, pos: int) -> float | None:
     if series is None:
         return None
     valid = series.dropna()
-    idx = len(valid) + pos  # pos 是负数，如 -2 表示倒数第二个
+    idx = len(valid) + pos
     if idx < 0 or idx >= len(valid):
         return None
     return float(valid.iloc[idx])

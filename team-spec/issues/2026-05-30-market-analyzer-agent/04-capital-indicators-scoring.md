@@ -33,3 +33,35 @@ AFK（可独立执行，无需人工决策）
 - `capital.data` 已按 `trade_date` 降序排列（数据采集 Agent 保证），第一条即最近 1 日
 - `net_mf_amount` 和 `buy_lg_amount`/`sell_lg_amount` 单位为万元（Tushare 返回值），计算比率时单位抵消
 - `insufficient` 标记由数据采集 Agent 设置（`CapitalFlowData.insufficient`），本函数直接读取
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-30T04:15:31Z
+- GitHub Number: 14
+- GitHub URL: https://github.com/yanheng799/financial/issues/14
+
+## Implementation Notes
+
+### 变更文件
+
+- `src/analyzer/indicators.py` — `compute_capital_indicators(capital_data)` 函数：近 N 日净流入合计、大单买卖比率
+- `src/analyzer/scoring.py` — `score_capital(indicators, insufficient, has_data)` 函数：主力方向 + 大单强弱两条规则
+- `tests/test_capital_scoring.py` — 13 个行为测试
+
+### 设计决策
+
+- 回看天数从 `configs/scoring.yaml` 的 `capital_flow.days` 读取
+- `compute_capital_indicators` 需要满足回看天数才计算 `net_mf_amount_5d`，不足时返回 None
+- `score_capital` 接收 `has_data` 参数判断是否有可用数据，与 `insufficient` 分开
+
+## Acceptance Criteria Coverage
+
+| AC | 测试 | 状态 |
+|---|---|---|
+| AC#1 净流入+大单买入强势 → value=2 | `test_bullish_scores_plus2` | ✅ |
+| AC#2 净流出+大单卖出强势 → value=-2 | `test_bearish_scores_minus2` | ✅ |
+| AC#3 insufficient=True → value=0 | `test_insufficient_flag` | ✅ |
+| AC#4 数据仅2行 → data_sufficient=True | `test_partial_data_still_sufficient` | ✅ |
+| AC#5 数据为空 → value=0 | `test_empty_data_not_insufficient` | ✅ |
+| AC#6 阈值从配置读取 | `test_ratio_thresholds_from_config`, `test_days_from_config` | ✅ |

@@ -4,26 +4,16 @@ from src.analyzer.schemas import DimensionScore, load_scoring_config
 
 
 def score_technical(indicators: dict, daily_count: int) -> DimensionScore:
-    """技术面评分：MA 排列 + MACD 柱方向 + 成交量修正。
-
-    Args:
-        indicators: compute_technical_indicators() 的输出
-        daily_count: 可用日线行数，用于判断降级
-
-    Returns:
-        DimensionScore（value 在 -2~+2）
-    """
+    """技术面评分：MA 排列 + MACD 柱方向 + 成交量修正。"""
     config = load_scoring_config()
     min_rows = config["min_daily_rows"]
 
-    # 数据不足
     if daily_count < min_rows:
         return DimensionScore(value=0, reason="日线数据不足，无法计算技术指标", data_sufficient=False)
 
     score = 0
     reasons = []
 
-    # MA 排列（需要 ma60）
     ma5 = indicators.get("ma5")
     ma20 = indicators.get("ma20")
     ma60 = indicators.get("ma60")
@@ -36,7 +26,6 @@ def score_technical(indicators: dict, daily_count: int) -> DimensionScore:
             score -= 1
             reasons.append("均线空头排列")
 
-    # MACD 柱方向
     macd_hist = indicators.get("macd_hist")
     macd_hist_prev = indicators.get("macd_hist_prev")
 
@@ -48,12 +37,10 @@ def score_technical(indicators: dict, daily_count: int) -> DimensionScore:
             score -= 1
             reasons.append("MACD柱缩减")
 
-    # 成交量修正
     vol_ratio = indicators.get("vol_ratio")
     if vol_ratio is not None and vol_ratio < config["vol_ratio"]["weaken"]:
         score = int(score * 0.5)
 
-    # clamp
     score = max(-2, min(2, score))
 
     return DimensionScore(
@@ -64,25 +51,15 @@ def score_technical(indicators: dict, daily_count: int) -> DimensionScore:
 
 
 def score_fundamental(indicators: dict, has_fundamental: bool) -> DimensionScore:
-    """基本面评分：PE 分位数 + ROE + 成长趋势。
-
-    Args:
-        indicators: compute_fundamental_indicators() 的输出
-        has_fundamental: 是否有财报数据（fina_indicator 非空）
-
-    Returns:
-        DimensionScore（value 在 -2~+2）
-    """
+    """基本面评分：PE 分位数 + ROE + 成长趋势。"""
     config = load_scoring_config()
 
-    # 完全无财务数据
     if not has_fundamental:
         return DimensionScore(value=0, reason="暂无财务数据", data_sufficient=False)
 
     score = 0
     reasons = []
 
-    # 估值位置
     pe_percentile = indicators.get("pe_percentile_1y")
     if pe_percentile is not None:
         if pe_percentile < config["pe"]["low_percentile"]:
@@ -92,10 +69,9 @@ def score_fundamental(indicators: dict, has_fundamental: bool) -> DimensionScore
             score -= 1
             reasons.append("PE处于近一年高位")
 
-    # 盈利能力
     roe = indicators.get("roe_yearly")
     if roe is not None:
-        roe_pct = roe * 100 if roe < 1 else roe  # 兼容小数和百分比两种格式
+        roe_pct = roe * 100 if roe < 1 else roe
         if roe_pct > config["roe"]["high"]:
             score += 1
             reasons.append("ROE优秀(>15%)")
@@ -103,7 +79,6 @@ def score_fundamental(indicators: dict, has_fundamental: bool) -> DimensionScore
             score -= 1
             reasons.append("ROE偏低(<3%)")
 
-    # 成长趋势
     tr_yoy = indicators.get("tr_yoy")
     netprofit_yoy = indicators.get("netprofit_yoy")
     if tr_yoy is not None and netprofit_yoy is not None:
@@ -115,6 +90,43 @@ def score_fundamental(indicators: dict, has_fundamental: bool) -> DimensionScore
         elif tr_pct < 0 and np_pct < 0:
             score -= 1
             reasons.append("营收净利润双降")
+
+    score = max(-2, min(2, score))
+
+    return DimensionScore(
+        value=score,
+        reason="；".join(reasons) if reasons else "无明显信号",
+        data_sufficient=True,
+    )
+
+
+def score_capital(indicators: dict, insufficient: bool, has_data: bool) -> DimensionScore:
+    """资金面评分：主力方向 + 大单强弱。"""
+    config = load_scoring_config()
+
+    if insufficient or not has_data:
+        return DimensionScore(value=0, reason="资金面数据不足", data_sufficient=False)
+
+    score = 0
+    reasons = []
+
+    net_flow = indicators.get("net_mf_amount_5d")
+    if net_flow is not None:
+        if net_flow > 0:
+            score += 1
+            reasons.append("近5日主力净流入")
+        elif net_flow < 0:
+            score -= 1
+            reasons.append("近5日主力净流出")
+
+    lg_ratio = indicators.get("lg_buy_sell_ratio")
+    if lg_ratio is not None:
+        if lg_ratio > config["lg_ratio"]["strong"]:
+            score += 1
+            reasons.append("大单买入强势")
+        elif lg_ratio < config["lg_ratio"]["weak"]:
+            score -= 1
+            reasons.append("大单卖出强势")
 
     score = max(-2, min(2, score))
 
