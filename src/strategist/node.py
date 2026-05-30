@@ -7,7 +7,12 @@ from src.strategist.schemas import load_llm_config
 
 
 def human_review_agent(state: AnalysisState) -> dict:
-    """Human-in-the-loop 审批节点。"""
+    """Human-in-the-loop 审批节点。
+
+    从 configs/llm.yaml 读取 auto_approve 开关：
+    - auto_approve=True：直接返回 human_approved=True，不中断
+    - auto_approve=False：调用 interrupt()，等待用户在 Streamlit 批准后 resume
+    """
     config = load_llm_config()
     auto_approve = config.get("auto_approve", True)
 
@@ -19,20 +24,12 @@ def human_review_agent(state: AnalysisState) -> dict:
 
 
 def build_prompt(technical_report: dict) -> str:
-    """从 TechnicalReport 构造 LLM prompt。
-
-    Args:
-        technical_report: TechnicalReport.model_dump() 输出
-
-    Returns:
-        完整的 LLM prompt 字符串
-    """
+    """从 TechnicalReport 构造 LLM prompt。"""
     scores = technical_report.get("scores", {})
     indicators = technical_report.get("indicators", {})
     symbol = technical_report.get("symbol", "")
     date_str = technical_report.get("date", "")
 
-    # 1. 评分摘要
     score_lines = []
     score_values = []
     dim_sources = {
@@ -60,7 +57,6 @@ def build_prompt(technical_report: dict) -> str:
 
         score_values.append(value)
 
-    # 2. 关键指标摘要
     key_indicators = [
         ("ma5", "MA5"), ("ma20", "MA20"), ("ma60", "MA60"),
         ("macd_hist", "MACD柱"), ("vol_ratio", "成交量比"),
@@ -75,10 +71,8 @@ def build_prompt(technical_report: dict) -> str:
         if val is not None:
             indicator_lines.append(f"  {label}: {_fmt_val(val)}")
 
-    # 3. 最大分差
     max_diff = max(score_values) - min(score_values) if len(score_values) >= 2 else 0
 
-    # 4. 组装
     prompt = f"""股票代码：{symbol}
 分析日期：{date_str}
 
