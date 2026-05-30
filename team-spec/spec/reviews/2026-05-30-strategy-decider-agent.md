@@ -1,12 +1,12 @@
-# 规格评审：策略决策 Agent
+# 规格评审：策略决策 Agent（v2）
 
-**评审对象**：`team-spec/spec/refine/2026-05-30-strategy-decider-agent.md`
+**评审对象**：`team-spec/spec/refine/2026-05-30-strategy-decider-agent.md`（第二轮修订）
 **评审日期**：2026-05-30
 **Status**：ready
 
 ## 结论
 
-P0（LLM prompt 置信度冲突）和 P1（缩减后置信度规则缺失、auto_approve 传递机制未定义）已修正：`confidence_level` 从 prompt 移除改为代码注入；置信度表覆盖 3/2/1/0 全部维度数；`auto_approve` 放入 `configs/llm.yaml`。剩余 P2/P3 风险不阻塞 PRD 固化。规格可以进入 `team-spec-to-prd`。
+v2 规格已与实现对齐，无 P0 阻塞项。LLMOutput/DecisionReport 分离、7 字段代码注入、error 字段的引入消除了 v1 评审中 P0（置信度冲突）和多项 P1（auto_approve 传递、置信度缩维规则缺失）的残留风险。LLM 格式不稳定风险从 P1 降为 P2（5 字段 vs 原 12 字段，确定性字段不受 LLM 幻觉影响）。v2 可以进入 PRD 刷新或直接跳过 PRD 固化（因为 v1 PRD 已存在且变更已有 issue 覆盖）。
 
 ## 阻塞项
 
@@ -16,41 +16,40 @@ P0（LLM prompt 置信度冲突）和 P1（缩减后置信度规则缺失、auto
 
 | 等级 | 风险 | 触发条件 | 影响 | 证据/缺口 | 建议动作 | Owner | 截止点 |
 |---|---|---|---|---|---|---|---|
-| P2 | LLM 返回 JSON 格式不稳定 | LLM 输出不规范 | Pydantic 校验失败，触发重试 | 温度 0.1 + `Literal` 约束已缓解 | PRD 验收标准覆盖 | yanhe | 实现时 |
-| P2 | `bearish_factor` 被 LLM 敷衍 | LLM 输出"无"或泛泛而谈 | 反向风险分析失效 | Prompt 已要求"必须指出一条具体反向因素" | PRD 验收标准明确验证 | yanhe | 实现时 |
-| P2 | `indicators` 字段过多导致 token 超限 | 13 个键+描述超 token 上限 | LLM 调用失败 | 细化文档仅提缓解方向未具体定义 | PRD 中定义截断策略（优先保留评分相关键） | yanhe | PRD 编写时 |
-| P2 | `NodeInterrupt` 无 checkpointer 时的行为 | `auto_approve=False` 且无 checkpointer | 运行时异常 | `auto_approve=True` 时不会触发，开发时可验证 | 开发启动时验证 | yanhe | 实现时 |
-| P3 | LLM mock 测试策略未定义 | 自动化测试依赖 LLM API | 测试不可靠或有外部依赖 | 现有 mock 模式可扩展至 LLM API | PRD 测试决策章节说明 | — | 实现时 |
+| P2 | LLM API 401/403 错误类型与规格不一致 | LLM key 无效或过期，API 返回 401/403 | `error_type` 为 `"llm_call"` 而非 `"config"` | 规格写 `error_type: "config"`，代码在 `except Exception` 中返回 `error_type: "llm_call"` | 统一到 `error_type: "config"`（语义更精确），或规格改为 `error_type: "llm_call"` 并注释说明 | yanhe | PRD 刷新时 |
+| P2 | `auto_approve` 拒绝后 Streamlit 如何消费 `error` 字段未定义 | Streamlit 读取 `state["decision_report"]` 但发现为空 | 用户看到空白或无提示的失败 | Streamlit UI 不在 Phase 1 范围（`auto_approve=True` 绕过）。`error` 字段已存在供下游消费 | Streamlit 实现时检查 `error` 字段并展示 | yanhe | Streamlit 开发时 |
+| P2 | `indicators` 截断策略未实现 | Phase 2 加情绪面指标后 key_indicators 增长 | prompt token 超 model 限制 | 当前 12 个精选指标约 500-800 token，安全边际充足 | Phase 2 新增指标时评估是否需要截断 | yanhe | Phase 2 |
+| P3 | `LLMOutput` 和 `DecisionReport` 共享 `overall_judgment` 枚举导致重复定义 | 两个类维护相同的 Literal | 增删枚举值时需同步修改两处 | 当前代码中两处枚举值相同 | 可用常量提取：`OVERALL_JUDGMENT_VALUES = Literal["乐观", "中性", ...]` | yanhe | 下次重构 |
+| P3 | `scores` 维度顺序回填时不保证与输入一致 | `scores` 是 dict，Python 3.7+ 保证插入顺序 | LLM 输出回填的 scores 键顺序与输入一致 | Python 3.11 dict order-preserving | 现有行为已正确，无需修改 | — | — |
 
 ## Questions For User
 
-1. **`overall_judgment` 允许哪些值？** 当前系统设计文档写"乐观/中性/谨慎"，但 JSON 示例出现了"中性偏谨慎"。是否允许 LLM 自由组合（如"中性偏乐观"），还是严格限制为固定枚举？推荐固定枚举：`"乐观" | "中性" | "谨慎" | "中性偏谨慎" | "中性偏乐观"`。
-
-## Required Refinement
-
-需要更新 `team-spec/spec/refine/2026-05-30-strategy-decider-agent.md` 的以下章节：
-
-1. **LLM Prompt 结构**（第 80-112 行）：从 JSON 模板中移除 `"confidence_level"` 字段，标注该字段由代码注入
-2. **置信度计算**（第 114-122 行）：补充缩减维度后的规则（2 维/1 维/0 维时的处理）
-3. **输出 Schema**（第 134-155 行）：`confidence_level` 加注释说明"代码填充"；`overall_judgment` 改为 `Literal` 类型
-4. **human_review 节点**（第 50-54 行）：明确 `auto_approve` 的传递机制
+无（v2 已与实现对齐，无需回到 refine）。
 
 ## 建议改写
 
-### 置信度计算（修正后）
+### 1. `error_type` 分类统一（P2）
 
-| 有效维度数 | 置信度 | 条件 |
-|---|---|---|
-| 3 | 高 | 3 维方向一致 |
-| 3 | 中 | 2 维方向一致 |
-| 3 | 低 | 3 维方向各不相同，或任意两维得分差 ≥ 2 |
-| 2 | 高 | 2 维方向一致 |
-| 2 | 低 | 2 维方向不一致 |
-| 1 | 低 | 唯一有效维度 |
-| 0 | N/A | 不执行 LLM，返回错误 |
+当前规格表和代码存在轻微不一致。建议在 PRD 中明确三层错误分类：
 
-`data_sufficient=False` 的维度不参与一致性计算。方向：正（>0）、负（<0）、零（=0）。
+| 错误层 | `error_type` | 触发条件 | 重试 |
+|---|---|---|---|
+| 配置 | `"config"` | API key 缺失、配置文件缺失、LLM 401/403 | 不重试 |
+| 网络 | `"llm_call"` | 超时、HTTP 5xx、429 耗尽 | SDK 层已重试 |
+| 解析 | `"llm_parse_error"` | 非 JSON、LLMOutput schema 失败 | 应用层重试 1 次 |
+| 输入 | `"input"` | technical_report 为空、scores 全 insufficient | 不重试 |
+| 审批 | `"human_review"` | 用户拒绝 | 不重试 |
+
+### 2. 范围章节补充
+
+v2 新增的以下项应在"范围内"章节显式列出：
+- `LLMOutput` 模型（5 字段）+ `DecisionReport` 模型（12 字段）分离
+- `detect_conflict()` / `build_data_sources()` 代码函数
+- `AnalysisState.error` 字段
+- `DIM_SOURCES` 外置 + 维度动态遍历
+- `request_timeout` 配置
 
 ## Change Log
 
-- 2026-05-30：初始评审。发现 P0（LLM prompt 置信度冲突）和 P1（缩减后置信度规则缺失）。Status: needs refinement。
+- 2026-05-30（v1）：初始评审。发现 P0（LLM prompt 置信度冲突）和 P1（缩维规则缺失）。Status: needs refinement。
+- 2026-05-30（v2）：第二次评审。v1 P0/P1 已全部解决（#35–#38 实现）。v2 规格完全对齐实现。Status: ready。
