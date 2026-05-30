@@ -18,14 +18,25 @@ logger = logging.getLogger(__name__)
 
 
 def human_review_agent(state: AnalysisState) -> dict:
+    """Human-in-the-loop 审批节点。
+
+    从 configs/llm.yaml 读取 auto_approve 开关：
+    - auto_approve=True：直接返回 human_approved=True，不中断
+    - auto_approve=False：调用 interrupt()，等待用户在 Streamlit 批准后 resume
+    """
     config = load_llm_config()
-    if config.get("auto_approve", True):
+    auto_approve = config.get("auto_approve", True)
+
+    if auto_approve:
         return {"human_approved": True}
-    return interrupt("请确认 technical_report，批准后继续")
+
+    msg = "请确认 technical_report，批准后继续"
+    return interrupt(msg)
 
 
 def _dim_name(key: str) -> str:
-    return {"technical": "技术面评分", "fundamental": "基本面评分", "capital": "资金面评分"}.get(key, key)
+    names = {"technical": "技术面评分", "fundamental": "基本面评分", "capital": "资金面评分"}
+    return names.get(key, key)
 
 
 def _fmt_val(val) -> str:
@@ -36,12 +47,18 @@ def _fmt_val(val) -> str:
     return str(val)
 
 
+def _extract_data_sufficient(dim) -> bool:
+    if hasattr(dim, "data_sufficient"):
+        return dim.data_sufficient
+    return dim.get("data_sufficient", True)
+
+
 def _make_error(error_type: str, message: str, detail: str = "") -> dict:
     return {"error_type": error_type, "message": message, "detail": detail}
 
 
-
 def build_prompt(technical_report: dict) -> str:
+    """从 TechnicalReport 构造 LLM prompt。"""
     scores = technical_report.get("scores", {})
     indicators = technical_report.get("indicators", {})
     symbol = technical_report.get("symbol", "")
@@ -59,15 +76,19 @@ def build_prompt(technical_report: dict) -> str:
         dim = scores.get(dim_key)
         if dim is None:
             continue
+
         value = dim.value if hasattr(dim, "value") else dim.get("value", 0)
         reason = dim.reason if hasattr(dim, "reason") else dim.get("reason", "")
-        sufficient = dim.data_sufficient if hasattr(dim, "data_sufficient") else dim.get("data_sufficient", True)
+        sufficient = _extract_data_sufficient(dim)
+
         conf_label = "确定性数据支撑" if sufficient else "数据不足，仅供参考"
         source = dim_sources.get(dim_key, "")
+
         if not sufficient:
             score_lines.append(f"{_dim_name(dim_key)}：{value}（{reason}）【{conf_label}】")
         else:
             score_lines.append(f"{_dim_name(dim_key)}：{value}（{reason}）【{conf_label}，来源：{source}】")
+
         score_values.append(value)
 
     key_indicators = [
@@ -78,15 +99,15 @@ def build_prompt(technical_report: dict) -> str:
         ("netprofit_yoy", "净利润YoY(%)"),
         ("net_mf_amount_5d", "近5日主力净流入"), ("lg_buy_sell_ratio", "大单买卖比"),
     ]
-    indicator_lines = [
-        f"  {label}: {_fmt_val(indicators.get(key))}"
-        for key, label in key_indicators
-        if indicators.get(key) is not None
-    ]
+    indicator_lines = []
+    for key, label in key_indicators:
+        val = indicators.get(key)
+        if val is not None:
+            indicator_lines.append(f"  {label}: {_fmt_val(val)}")
 
     max_diff = max(score_values) - min(score_values) if len(score_values) >= 2 else 0
 
-    return f"""股票代码：{symbol}
+    prompt = f"""股票代码：{symbol}
 分析日期：{date_str}
 
 {chr(10).join(score_lines)}
@@ -119,6 +140,8 @@ def build_prompt(technical_report: dict) -> str:
 3. 无论综合判断如何，必须输出 bearish_factor
 4. 不得输出 JSON 之外的文字"""
 
+    return prompt
+
 
 def strategy_decider_agent(state: AnalysisState) -> dict:
     technical_report = state.get("technical_report")
@@ -130,7 +153,7 @@ def strategy_decider_agent(state: AnalysisState) -> dict:
         return {"error": _make_error("input", "technical_report.scores 为空")}
 
     all_insufficient = all(
-        (s.data_sufficient if hasattr(s, "data_sufficient") else s.get("data_sufficient", True)) is False
+        (_extract_data_sufficient(s)) is False
         for s in scores.values()
     )
     if all_insufficient:
