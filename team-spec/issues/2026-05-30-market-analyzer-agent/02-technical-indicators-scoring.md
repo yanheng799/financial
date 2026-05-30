@@ -34,3 +34,36 @@ AFK（可独立执行，无需人工决策）
 - vol_ratio 手动计算（当日 vol / 近 20 日 vol 均值），不用 pandas-ta
 - 成交量修正的 `score *= 0.5` 后需取整（`int()`），确保输出仍为整数
 - 指标计算的输入是 `raw_data.daily.data`（list[dict]），需先转为 DataFrame
+
+## Publish Status
+
+- Status: created
+- Updated At: 2026-05-30T04:15:21Z
+- GitHub Number: 12
+- GitHub URL: https://github.com/yanheng799/financial/issues/12
+
+## Implementation Notes
+
+### 变更文件
+
+- `src/analyzer/indicators.py` — `compute_technical_indicators(daily_data)` 函数：用 pandas-ta-classic 计算 SMA5/20/60、MACD(12,26,9) 柱状图、vol_ratio
+- `src/analyzer/scoring.py` — `score_technical(indicators, daily_count)` 函数：MA 排列 + MACD 柱 + 成交量修正，阈值从配置读取
+- `tests/test_technical_scoring.py` — 13 个行为测试（指标计算 4 + 评分规则 4 + 成交量修正 2 + 降级 2 + 配置 1）
+
+### 设计决策
+
+- `compute_technical_indicators` 输入为 `list[dict]`（`raw_data.daily.data` 格式），内部转 DataFrame 升序计算后提取最新值
+- pandas-ta-classic 在数据不足时返回 `None` 而非 NaN Series，`_last_value()` 处理了这种情况
+- `score_technical` 接收 `daily_count` 参数用于降级判断，不依赖指标计算结果推断行数
+- 成交量修正使用 `int(score * 0.5)` 取整，确保输出仍为整数
+
+## Acceptance Criteria Coverage
+
+| AC | 测试 | 状态 |
+|---|---|---|
+| AC#1 多头+MACD扩张+放量 → value=2 | `test_full_bullish_with_high_volume` | ✅ |
+| AC#2 空头+MACD缩减 → value=-2 | `test_full_bearish` | ✅ |
+| AC#3 多头但缩量 → 分数削弱 | `test_low_volume_weakens_score` | ✅ |
+| AC#4 日线30行(无MA60) → 跳过MA排列 | `test_no_ma60_skips_ma_arrangement` | ✅ |
+| AC#5 日线3行 → value=0, data_sufficient=False | `test_too_few_rows_returns_zero` | ✅ |
+| AC#6 vol_ratio 阈值从配置读取 | `test_thresholds_match_config` | ✅ |
