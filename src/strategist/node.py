@@ -3,6 +3,7 @@
 import json
 import logging
 
+from langgraph.graph.state import StateGraph
 from langgraph.types import interrupt
 
 from src.state import AnalysisState
@@ -203,3 +204,21 @@ def strategy_decider_agent(state: AnalysisState) -> dict:
         return {"decision_report": report.model_dump()}
 
     return {"error": _make_error("llm_parse_error", "LLM 输出校验失败，重试后仍失败")}
+
+
+def route_after_review(state: AnalysisState) -> str:
+    """human_review 后的条件路由：approved → strategy_decider，否则 END。"""
+    if state.get("human_approved"):
+        return "strategy_decider"
+    return "__end__"
+
+
+def build_strategist_graph() -> StateGraph:
+    """构建策略决策 Agent StateGraph：human_review → strategy_decider。"""
+    graph = StateGraph(AnalysisState)
+    graph.add_node("human_review", human_review_agent)
+    graph.add_node("strategy_decider", strategy_decider_agent)
+    graph.set_entry_point("human_review")
+    graph.add_conditional_edges("human_review", route_after_review)
+    graph.set_finish_point("strategy_decider")
+    return graph.compile()

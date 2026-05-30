@@ -100,7 +100,7 @@ def compute_confidence(scores: dict[str, Any]) -> Literal["高", "中", "低"]:
     if len(valid) == 1:
         return "低"
 
-    values = [v.value for v in valid.values()]
+    values = [_get_value(v) for v in valid.values()]
     signs = [_sign(v) for v in values]
 
     # 任意两维得分差 >= 2 → 低
@@ -128,7 +128,7 @@ def to_score_entry(dim_score: Any) -> ScoreEntry:
     data_sufficient=False → confidence="insufficient"
     """
     confidence = "determined" if _get_data_sufficient(dim_score) else "insufficient"
-    return ScoreEntry(value=dim_score.value, reason=dim_score.reason, confidence=confidence)
+    return ScoreEntry(value=_get_value(dim_score), reason=_get_reason(dim_score), confidence=confidence)
 
 
 def _sign(v: int) -> int:
@@ -141,5 +141,27 @@ def _sign(v: int) -> int:
 
 
 def _get_data_sufficient(obj: Any) -> bool:
-    """安全获取 data_sufficient 属性，默认 True"""
-    return getattr(obj, "data_sufficient", True)
+    """安全获取 data_sufficient，兼容对象和 dict，默认 True"""
+    if hasattr(obj, "data_sufficient"):
+        return obj.data_sufficient
+    if isinstance(obj, dict):
+        return obj.get("data_sufficient", True)
+    return True
+
+
+def _get_value(obj: Any) -> int:
+    """安全获取 value，兼容对象和 dict"""
+    if hasattr(obj, "value"):
+        return obj.value
+    if isinstance(obj, dict):
+        return obj.get("value", 0)
+    return 0
+
+
+def _get_reason(obj: Any) -> str:
+    """安全获取 reason，兼容对象和 dict"""
+    if hasattr(obj, "reason"):
+        return obj.reason
+    if isinstance(obj, dict):
+        return obj.get("reason", "")
+    return ""
