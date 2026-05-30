@@ -28,6 +28,30 @@ AFK（可独立执行，无需人工决策）
 - [ ] PRD 验收标准 #1-8 全部通过
 - [ ] 自动化测试：mock Tushare API 超时场景，验证重试 2 次后报错
 
+## Acceptance Criteria Coverage
+
+| AC | 测试 | 状态 |
+|---|---|---|
+| AC#1 raw_data 含 daily/fundamental/capital | `test_reads_symbol_and_writes_raw_data`, `test_graph_execution_with_mock` | ✅ |
+| AC#2 TUSHARE_TOKEN 未配置 → 结构化错误 | `test_token_missing_returns_structured_error` | ✅ |
+| AC#3 裸代码自动补全 | `test_auto_completes_bare_symbol` | ✅ |
+| AC#4 空结果 → "未找到该股票" | `test_empty_tushare_result_returns_stock_not_found_error` | ✅ |
+| AC#5 超时重试成功 | `test_retries_on_timeout` | ✅ |
+| AC#6 PRD AC#1-8 | 由 Issues #1-4 测试覆盖 | ✅ |
+| AC#7 超时重试 2 次后报错 | `test_retries_exhausted_returns_error` | ✅ |
+
+## Implementation Notes
+
+### 变更文件
+
+- `src/collector/node.py` — 新增空数据检测：当 `fetch_all` 返回的 `daily.data` 和所有 fundamental 子列表均为空时，返回 `error_type: "not_found"` 结构化错误
+- `tests/test_langgraph.py` — 新增 `test_empty_tushare_result_returns_stock_not_found_error`；修补 retry 测试中的 `time.sleep`；清理未使用 import
+
+### 设计决策
+
+- **空数据检测逻辑**：检查 `daily.data` 为空且 fundamental 三个子维度均为空，才判定为"未找到"。这样如果 moneyflow 接口返回空（积分不足）但日线数据存在，不会误判为"未找到"
+- **time.sleep mock**：retry 测试中 patch `src.collector.node.time`，消除 ~9s 实际等待，测试套件从 ~10s 降至 ~1.5s
+
 ## Blocked by
 
 - #4（Parquet 存储和缓存已完成）

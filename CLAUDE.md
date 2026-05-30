@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A 股分析 Agent 系统——基于 LangGraph 多 Agent 编排的单人本地工具。输入股票代码，产出技术面/基本面/资金面三维评分 + LLM 综合研判报告，通过 Streamlit 仪表盘展示。
 
-**当前状态**：Pre-implementation。`src/` 为空，所有设计文档和 Tushare Skill 定义已完成。
+**当前状态**：数据采集 Agent 已实现（`src/collector/`），行情分析 Agent 待实现（`src/analyzer/`）。
 
 ## Commands
 

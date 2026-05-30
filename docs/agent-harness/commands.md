@@ -60,10 +60,14 @@ ruff check --fix . && ruff format .
 pytest
 
 # 运行单个测试文件
-pytest tests/test_collector.py
+pytest tests/test_scaffolding.py          # 脚手架和模型
+pytest tests/test_adapter_daily.py        # TushareAdapter daily
+pytest tests/test_adapter_all_interfaces.py  # 全部接口
+pytest tests/test_storage.py              # Parquet 存储
+pytest tests/test_langgraph.py            # LangGraph 集成
 
 # 运行单个测试函数
-pytest tests/test_collector.py::test_code_parsing -v
+pytest tests/test_scaffolding.py::TestCodeParser::test_shanghai_stock -v
 
 # 显示详细输出
 pytest -v
@@ -91,11 +95,17 @@ python .agents/skills/tushare/scripts/fund_data_demo.py
 **适用场景**：验证 Tushare 连通性，测试 Token 是否有效。
 **前置条件**：`TUSHARE_TOKEN` 已配置。
 
-## 待安装的依赖（Issue #1 实现时需补充）
+## 待安装的依赖
 
 ```bash
-# pyproject.toml 已声明但尚未安装的包
-pip install pandas-ta streamlit
+# 行情分析 Agent 所需（必须在 analyzer issue #01 前安装）
+pip install pandas-ta
+
+# 验证兼容性
+python -c "import pandas_ta; print('pandas-ta', pandas_ta.version)"
+
+# 后续所需（Phase 1 后期）
+pip install streamlit
 ```
 
-后续应将这些加入 `pyproject.toml` 的 `dependencies` 列表。
+后续应将 `pandas-ta` 和 `streamlit` 加入 `pyproject.toml` 的 `dependencies` 列表。
