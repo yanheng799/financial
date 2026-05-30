@@ -42,6 +42,33 @@ AFK（可独立执行，无需人工决策）
 - 缓存判断逻辑：检查所有必要的 Parquet 文件是否存在。如果部分存在（如只有 daily 没有 fundamental），视为缓存不完整，按缺失维度调 API 补齐。
 - 目录不存在时自动创建（`data/daily/`、`data/fundamental/`、`data/capital/`）。
 
+## Implementation Notes
+
+- 实现日期：2026-05-30
+- 修改文件：
+  - `src/collector/storage.py` — `save_all()`/`load()`/`is_cached()` + 内部写入/读取函数
+  - `src/collector/adapter.py` — `fetch_all()` 集成缓存逻辑 + `_get_data_dir()` 工具函数
+  - `pyproject.toml` — 新增 `pyarrow>=14.0` 依赖
+  - `tests/test_storage.py` — 12 个新测试用例
+  - `tests/test_adapter_all_interfaces.py` — 更新 2 个测试 mock `_get_data_dir`
+- 缓存判断：daily + 3 个 fundamental 文件必须存在；capital 文件可选（insufficient 时不写文件）
+- `_get_data_dir()` 默认返回 `Path("data")`，可通过 patch 替换进行测试
+
+## Acceptance Criteria Coverage
+
+- [x] Given 本地无数据，When 调用 `fetch_all("600519.SH")`，Then 调 API 拉取，生成 5 个 Parquet 文件 — `TestFetchAllCaching::test_fetch_all_calls_api_when_no_cache`
+- [x] Given 本地已有全部文件，When 再次 `fetch_all()`，Then 直接读本地，无 API 调用 — `TestFetchAllCaching::test_fetch_all_uses_cache`
+- [x] Given 本地已有数据，When `fetch_all(force_refresh=True)`，Then 调 API 覆盖 — `TestFetchAllCaching::test_fetch_all_force_refresh_overwrites`
+- [x] Given 每个 Parquet 文件，When 检查列，Then 包含 source/fetched_at/raw_value — `TestParquetWriteAndRead::test_saved_files_contain_traceability_columns`
+- [x] Given capital insufficient，When 落盘，Then capital 目录下无文件 — `TestParquetWriteAndRead::test_insufficient_capital_writes_no_file`
+- [x] 自动化测试：mock 文件系统覆盖三条路径 — `TestFetchAllCaching`（3 个测试）+ `TestCacheCheck`（4 个测试）
+
+## Verification
+
+- `pytest tests/` — 60 passed（20 + 13 + 15 + 12 storage）
+- `ruff check src/ tests/` — All checks passed
+- PR: https://github.com/yanheng799/financial/pull/9
+
 ## Publish Status
 
 - Status: created
