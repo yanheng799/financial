@@ -1,9 +1,20 @@
-"""策略决策 Agent LangGraph 节点函数"""
+"""策略决策 Agent — human_review + build_prompt + strategy_decider"""
+
+import json
+import logging
 
 from langgraph.types import interrupt
 
 from src.state import AnalysisState
-from src.strategist.schemas import load_llm_config
+from src.strategist.schemas import (
+    DecisionReport,
+    compute_confidence,
+    create_llm_client,
+    load_llm_config,
+    to_score_entry,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def human_review_agent(state: AnalysisState) -> dict:
@@ -21,6 +32,29 @@ def human_review_agent(state: AnalysisState) -> dict:
 
     msg = "请确认 technical_report，批准后继续"
     return interrupt(msg)
+
+
+def _dim_name(key: str) -> str:
+    names = {"technical": "技术面评分", "fundamental": "基本面评分", "capital": "资金面评分"}
+    return names.get(key, key)
+
+
+def _fmt_val(val) -> str:
+    if val is None:
+        return "N/A"
+    if isinstance(val, float):
+        return f"{val:.4g}"
+    return str(val)
+
+
+def _extract_data_sufficient(dim) -> bool:
+    if hasattr(dim, "data_sufficient"):
+        return dim.data_sufficient
+    return dim.get("data_sufficient", True)
+
+
+def _make_error(error_type: str, message: str, detail: str = "") -> dict:
+    return {"error_type": error_type, "message": message, "detail": detail}
 
 
 def build_prompt(technical_report: dict) -> str:
@@ -109,20 +143,63 @@ def build_prompt(technical_report: dict) -> str:
     return prompt
 
 
-def _dim_name(key: str) -> str:
-    names = {"technical": "技术面评分", "fundamental": "基本面评分", "capital": "资金面评分"}
-    return names.get(key, key)
+def strategy_decider_agent(state: AnalysisState) -> dict:
+    technical_report = state.get("technical_report")
+    if not technical_report:
+        return {"error": _make_error("input", "technical_report 为空，请先执行行情分析 Agent")}
 
+    scores = technical_report.get("scores", {})
+    if not scores:
+        return {"error": _make_error("input", "technical_report.scores 为空")}
 
-def _fmt_val(val) -> str:
-    if val is None:
-        return "N/A"
-    if isinstance(val, float):
-        return f"{val:.4g}"
-    return str(val)
+    all_insufficient = all(
+        (_extract_data_sufficient(s)) is False
+        for s in scores.values()
+    )
+    if all_insufficient:
+        return {"error": _make_error("input", "所有维度均数据不足，无法进行策略分析")}
 
+    confidence_level = compute_confidence(scores)
+    entries = {dim: to_score_entry(s) for dim, s in scores.items()}
+    prompt = build_prompt(technical_report)
 
-def _extract_data_sufficient(dim) -> bool:
-    if hasattr(dim, "data_sufficient"):
-        return dim.data_sufficient
-    return dim.get("data_sufficient", True)
+    try:
+        client = create_llm_client()
+    except ValueError as e:
+        return {"error": _make_error("config", str(e))}
+
+    for attempt in range(2):
+        try:
+            response = client.invoke(prompt)
+            raw = response.content if hasattr(response, "content") else str(response)
+        except Exception as e:
+            return {"error": _make_error("llm_call", f"LLM 调用失败: {e}")}
+
+        # Parse JSON
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            if attempt == 0:
+                prompt += "\n\n【重要】上一次输出格式错误，请严格按 JSON 模板输出。"
+                continue
+            return {"error": _make_error("llm_parse_error", "LLM 返回非 JSON，重试后仍失败", detail=raw[:200])}
+
+        # 注入代码计算的值 (must happen before Pydantic validation)
+        data["confidence_level"] = confidence_level
+        data["scores"] = {
+            dim: e.model_dump() if hasattr(e, "model_dump") else {"value": e.value, "reason": e.reason, "confidence": e.confidence}
+            for dim, e in entries.items()
+        }
+
+        # Validate
+        try:
+            report = DecisionReport.model_validate(data)
+        except Exception as e:
+            if attempt == 0:
+                prompt += f"\n\n【重要】上一次输出不符合 schema: {e}。请严格按 JSON 模板输出。"
+                continue
+            return {"error": _make_error("llm_parse_error", f"LLM 输出不符合 schema: {e}", detail=raw[:200])}
+
+        return {"decision_report": report.model_dump()}
+
+    return {"error": _make_error("llm_parse_error", "LLM 输出校验失败，重试后仍失败")}

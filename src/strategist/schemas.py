@@ -1,4 +1,4 @@
-"""策略决策 Agent 输出模型——ScoreEntry、DecisionReport、LLM 配置加载、置信度计算"""
+"""策略决策 Agent — ScoreEntry, DecisionReport, LLM 配置加载, 置信度计算"""
 
 import os
 from pathlib import Path
@@ -57,7 +57,6 @@ def create_llm_client():
         max_tokens=config["max_tokens"],
         max_retries=2,
     )
-
 
 
 _LLM_CONFIG_CACHE: dict | None = None
