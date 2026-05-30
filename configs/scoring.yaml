@@ -1,0 +1,25 @@
+# 行情分析 Agent 评分阈值配置
+# 规则结构硬编码在评分函数内，此文件仅控制数值阈值
+
+# 技术面
+vol_ratio:
+  confirm: 1.5    # 放量确认阈值
+  weaken: 0.7     # 缩量削弱阈值
+min_daily_rows: 5  # 技术面最少日线行数
+
+# 基本面
+pe:
+  low_percentile: 30   # PE 低位百分位
+  high_percentile: 70  # PE 高位百分位
+roe:
+  high: 15  # ROE 优秀阈值（%）
+  low: 3    # ROE 偏低阈值（%）
+yoy:
+  high: 10  # 同比增长阈值（%）
+
+# 资金面
+capital_flow:
+  days: 5  # 主力方向回看天数
+lg_ratio:
+  strong: 1.5   # 大单买入强势比率
+  weak: 0.67    # 大单卖出强势比率
