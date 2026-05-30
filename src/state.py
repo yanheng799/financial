@@ -11,4 +11,5 @@ class AnalysisState(TypedDict):
     technical_report: dict
     decision_report: dict
     human_approved: bool
+    report_path: NotRequired[str]
     error: NotRequired[dict]

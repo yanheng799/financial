@@ -42,7 +42,11 @@ def report_publisher_agent(state: AnalysisState) -> dict:
         raw_data_paths=_build_raw_data_paths(symbol, DATA_DIR),
     )
 
-    # Parquet 落盘
+    # Parquet 落盘（空 scores 时跳过——pyarrow 无法序列化空 struct）
+    scores = report.scores
+    if not scores:
+        return {"report_path": ""}
+
     report_dir = Path(DATA_DIR) / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
 
@@ -56,3 +60,14 @@ def report_publisher_agent(state: AnalysisState) -> dict:
 
     logger.info("Report saved: %s", report_path)
     return {"report_path": str(report_path)}
+
+
+def build_publisher_graph():
+    """构建报告推送 Agent 最简 StateGraph。单节点，无条件边。"""
+    from langgraph.graph.state import StateGraph
+
+    graph = StateGraph(AnalysisState)
+    graph.add_node("report_publisher", report_publisher_agent)
+    graph.set_entry_point("report_publisher")
+    graph.set_finish_point("report_publisher")
+    return graph.compile()
