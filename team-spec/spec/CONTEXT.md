@@ -23,7 +23,9 @@ A 股分析 Agent 系统——单人本地工具。用户输入股票代码，�
 | **bearish_factor** | 强制输出项：无论综合判断如何，LLM 必须输出至少一条反向风险理由 |
 | **auto_approve** | 开关：`True` 时 `human_review` 自动通过，`False` 时触发 LangGraph interrupt 等待用户 |
 | **LLM provider** | DeepSeek / Qwen，通过 `configs/llm.yaml` 切换，OpenAI 兼容 SDK 调用 |
-| **报告推送 Agent** | 第四个节点，纯代码，JSON → Streamlit 渲染 + Parquet 存档 |
+| **报告推送 Agent** | 第四个节点，纯代码：组装 `AnalysisReport` + Parquet 归档（`{symbol}_{datetime}.parquet` 永不覆盖）。Streamlit `app.py` 独立渲染 UI |
+| **AnalysisReport** | 报告推送 Agent 输出的 Pydantic 模型——上游三维评分 + 指标 + LLM 研判 + 原始数据路径引用 |
+| **app.py** | Streamlit 独立入口，不在 LangGraph 图中。输入股票代码 → invoke 流水线 → 读 Parquet → 渲染结果 + 历史下拉 |
 | **可追溯性三字段** | 每条数据必须携带 `source`（接口名）、`fetched_at`（拉取时间 ISO 8601）、`raw_value`（原始值） |
 | **本地优先** | 有本地 Parquet 文件就直接用，用户点"刷新数据"才调 API 重拉 |
 
