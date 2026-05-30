@@ -9,7 +9,6 @@ import pytest
 
 from src.collector.schemas import DailyQuoteData
 
-
 # ── 行为 1：Token 缺失时给出配置指引 ────────────────────────
 
 
@@ -201,7 +200,7 @@ class TestFetchDaily:
             assert dates == ["20260103", "20260102", "20260101"]
 
     def test_calls_daily_api_with_correct_params(self):
-        """验证 pro.daily() 被正确调用"""
+        """验证 pro.daily() 被正确调用（分段模式下多次调用）"""
 
         with patch("tushare.pro_api") as mock_pro_api:
             mock_pro = MagicMock()
@@ -209,9 +208,11 @@ class TestFetchDaily:
             mock_pro.daily.return_value = _make_daily_df()
 
             adapter = _create_adapter()
-            adapter.fetch_daily("600519.SH", start_date="20250101", end_date="20250630")
+            adapter.fetch_daily("600519.SH", start_date="20250101", end_date="20251231")
 
-            mock_pro.daily.assert_called_once_with(ts_code="600519.SH", start_date="20250101", end_date="20250630")
+            # 分段模式下会被调用多次，每段都带 ts_code
+            for call in mock_pro.daily.call_args_list:
+                assert call.kwargs["ts_code"] == "600519.SH"
 
 
 # ── 行为 3：Pydantic 校验拦截缺失关键字段的数据 ─────────────
@@ -295,3 +296,20 @@ class TestCalcDateRange:
         start, end = calc_date_range(quarters=8)
         expected_start = (date.today() - timedelta(days=720)).strftime("%Y%m%d")
         assert start == expected_start
+
+    def test_fetch_daily_uses_default_one_year(self):
+        """不传 start/end 时 fetch_daily 默认拉取近 1 年（分段模式，首段起点≈1 年前）"""
+        from src.collector.adapter import calc_date_range
+
+        with patch("tushare.pro_api") as mock_pro_api:
+            mock_pro = MagicMock()
+            mock_pro_api.return_value = mock_pro
+            mock_pro.daily.return_value = _make_daily_df()
+
+            adapter = _create_adapter()
+            adapter.fetch_daily("600519.SH")
+
+            first_call = mock_pro.daily.call_args_list[0]
+            actual_start = first_call.kwargs["start_date"]
+            expected_start, _expected_end = calc_date_range(years=1)
+            assert actual_start == expected_start

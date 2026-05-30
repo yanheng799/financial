@@ -36,6 +36,30 @@ AFK（可独立执行，无需人工决策）
 - `fina_indicator` 和 `income` 是季频接口，数据量小（~8 行），不需要分段。
 - Tushare `vol` 字段单位为千手，在 Pydantic schema 中标注但不转换值。
 
+## Implementation Notes
+
+- 实现日期：2026-05-30
+- 修改文件：
+  - `src/collector/adapter.py` — 新增 `fetch_daily_basic()`、`fetch_fina_indicator()`、`fetch_income()`、`fetch_moneyflow()`、`fetch_all()` 方法；提取 `_annotate_and_dedup()`、`_fetch_segmented()`、`_split_date_range()` 共享工具函数；`fetch_daily()` 重构为分段拉取；新增 `SegmentFetchError` 异常类
+  - `tests/test_adapter_all_interfaces.py` — 15 个新测试用例（#3 专用）
+  - `tests/test_adapter_daily.py` — 更新 2 个测试以适配分段拉取模式
+- 分段拉取按 180 天/段拆分，任一段失败抛出 `SegmentFetchError`，不返回部分数据
+- `moneyflow` 降级逻辑：API 异常 / 返回 None / 返回空 DataFrame 均触发 `insufficient=True`
+
+## Acceptance Criteria Coverage
+
+- [x] Given 有效股票代码，When 调用 `fetch_all("600519.SH")`，Then 返回 `RawData` 含 4 项数据 — `TestFetchAll::test_returns_raw_data_with_all_dimensions`
+- [x] Given `moneyflow` 接口返回权限错误，When 调用 `fetch_all()`，Then `daily`/`fundamental` 正常，`capital.insufficient=True`，`capital.data=None` — `TestFetchAll::test_moneyflow_degrades_gracefully`
+- [x] Given 日线分段拉取第 2 段失败，When 调用 `fetch_daily()`，Then 返回 `SegmentFetchError` 错误说明第 2 段失败，不返回部分数据 — `TestSegmentedFetching::test_daily_segment_failure_raises_error`
+- [x] Given `fina_indicator` 返回 8 个季度数据，When 校验完成，Then 按 `end_date` 降序排列，无重复 — `TestFetchFinaIndicator`（排序 + 去重）
+- [x] 自动化测试：mock 4 个新接口的返回值，验证各接口数据正确映射到 `RawData` 对应字段 — `TestFetchAll` + 各接口独立测试
+
+## Verification
+
+- `pytest tests/` — 48 passed（20 scaffolding + 13 adapter daily + 15 adapter all interfaces）
+- `ruff check src/ tests/` — All checks passed
+- `ruff format --check src/ tests/` — 9 files already formatted
+
 ## Publish Status
 
 - Status: created

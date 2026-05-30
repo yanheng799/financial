@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ── 行为 1：项目目录结构和 State 定义 ──────────────────────
 
 
