@@ -2,16 +2,39 @@
 
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # ── Pydantic 数据模型 ────────────────────────────────────
 
 
-class DailyQuoteData(BaseModel):
-    """日线行情数据（daily 接口），每行含 source/fetched_at/raw_value"""
+class DailyQuoteRow(BaseModel):
+    """日线行情单行数据（daily 接口），含 OHLCV 字段与可追溯性标注。
 
-    data: list[dict]
+    Tushare daily 接口返回字段：ts_code, trade_date, open, high, low, close, vol, amount。
+    vol 字段单位为千手，保持原值不转换。
+    可追溯性字段 source / fetched_at / raw_value 由采集层附加。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    ts_code: str
+    trade_date: str
+    open: float
+    high: float
+    low: float
+    close: float
+    vol: float  # 单位：千手
+    amount: float
+    source: str
+    fetched_at: str  # ISO 8601
+    raw_value: str  # 该行首次获取时的完整 JSON 字符串
+
+
+class DailyQuoteData(BaseModel):
+    """日线行情数据（daily 接口），每行经 DailyQuoteRow 校验"""
+
+    data: list[DailyQuoteRow]
 
 
 class FundData(BaseModel):
