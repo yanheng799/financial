@@ -25,24 +25,15 @@ def _sample_technical_report():
     }
 
 
-def _valid_llm_response():
-    return {
-        "symbol": "600519.SH",
-        "date": "20260530",
-        "scores": {
-            "technical": {"value": 1, "reason": "均线多头排列", "confidence": "determined"},
-            "fundamental": {"value": 1, "reason": "PE低位", "confidence": "determined"},
-            "capital": {"value": -1, "reason": "净流出", "confidence": "determined"},
-        },
-        "conflict_detected": True,
+def _valid_llm_5_field_response():
+    """重构后的 LLM 只需输出 5 个推理字段"""
+    return json.dumps({
         "conflict_detail": "技术面偏多，资金面偏空",
         "overall_judgment": "中性偏谨慎",
         "key_driver": "资金面净流出",
         "risk_warning": "风险提示",
         "bearish_factor": "主力净流出明显",
-        "data_sources": ["Tushare"],
-        "generated_at": "2026-05-30T16:30:00",
-    }
+    })
 
 
 def _make_mock_llm(response_text):
@@ -56,21 +47,17 @@ class TestStrategyDeciderAgent:
     def test_returns_decision_report_on_success(self):
         from src.strategist.node import strategy_decider_agent
 
-        with patch("src.strategist.node.compute_confidence", return_value="中"):
-            with patch("src.strategist.node.to_score_entry") as mock_map:
-                with patch("src.strategist.node.build_prompt", return_value="mock prompt"):
-                    with patch("src.strategist.node.create_llm_client") as mock_cli:
-                        mock_map.side_effect = lambda ds: type("ScoreEntry", (), {"value": ds.value, "reason": ds.reason, "confidence": "determined"})()  # type: ignore[return-value]
-                        mock_llm = _make_mock_llm(json.dumps(_valid_llm_response(), ensure_ascii=False))
-                        mock_cli.return_value = mock_llm
+        mock_llm = _make_mock_llm(_valid_llm_5_field_response())
 
-                        state = {"symbol": "600519.SH", "technical_report": _sample_technical_report()}
-                        result = strategy_decider_agent(state)
+        with patch("src.strategist.node.create_llm_client", return_value=mock_llm):
+            state = {"symbol": "600519.SH", "technical_report": _sample_technical_report()}
+            result = strategy_decider_agent(state)
 
         assert "decision_report" in result
         report = result["decision_report"]
         assert report["symbol"] == "600519.SH"
-        assert report["confidence_level"] == "中"  # 代码注入
+        assert report["confidence_level"] == "低"  # 代码注入（max-min=2 >= 2）
+        assert report["conflict_detected"] is True  # 代码注入（+1, +1, -1）
         assert report["scores"]["technical"]["confidence"] == "determined"
 
     def test_empty_tech_report_returns_error(self):
@@ -86,16 +73,11 @@ class TestStrategyDeciderAgent:
         """非 JSON 响应 → 重试 1 次 → 仍失败"""
         from src.strategist.node import strategy_decider_agent
 
-        with patch("src.strategist.node.compute_confidence", return_value="中"):
-            with patch("src.strategist.node.to_score_entry") as mock_map:
-                with patch("src.strategist.node.build_prompt", return_value="mock prompt"):
-                    with patch("src.strategist.node.create_llm_client") as mock_cli:
-                        mock_map.side_effect = lambda ds: type("ScoreEntry", (), {"value": ds.value, "reason": ds.reason, "confidence": "determined"})()  # type: ignore[return-value]
-                        mock_llm = _make_mock_llm("not json at all")
-                        mock_cli.return_value = mock_llm
+        mock_llm = _make_mock_llm("not json at all")
 
-                        state = {"symbol": "600519.SH", "technical_report": _sample_technical_report()}
-                        result = strategy_decider_agent(state)
+        with patch("src.strategist.node.create_llm_client", return_value=mock_llm):
+            state = {"symbol": "600519.SH", "technical_report": _sample_technical_report()}
+            result = strategy_decider_agent(state)
 
         # 两次调用（初始 + 1 次重试）
         assert mock_llm.invoke.call_count == 2
