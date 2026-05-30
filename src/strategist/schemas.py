@@ -1,5 +1,6 @@
 """策略决策 Agent 输出模型——ScoreEntry、DecisionReport、LLM 配置加载"""
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -30,6 +31,33 @@ class DecisionReport(BaseModel):
     bearish_factor: str
     data_sources: list[str]
     generated_at: str
+
+
+def create_llm_client():
+    """从 configs/llm.yaml 创建 LangChain ChatOpenAI 实例。
+
+    支持 DeepSeek/Qwen 的 OpenAI 兼容端点。api_key 从环境变量读取。
+    Raises ValueError if api_key env var is not set.
+    """
+    from langchain_openai import ChatOpenAI
+
+    config = load_llm_config()
+    key_env = config["api_key_env"]
+    api_key = os.environ.get(key_env, "")
+
+    if not api_key:
+        msg = f"LLM API key not set. Please set the {key_env} environment variable."
+        raise ValueError(msg)
+
+    return ChatOpenAI(
+        model=config["model"],
+        base_url=config["base_url"],
+        api_key=api_key,
+        temperature=config["temperature"],
+        max_tokens=config["max_tokens"],
+        max_retries=2,
+    )
+
 
 
 _LLM_CONFIG_CACHE: dict | None = None
