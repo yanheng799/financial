@@ -55,6 +55,50 @@ def compute_technical_indicators(daily_data: list[dict]) -> dict:
     return result
 
 
+def compute_fundamental_indicators(fundamental_data: dict) -> dict:
+    """从估值和财务数据提取基本面指标。
+
+    Args:
+        fundamental_data: RawData.fundamental 的 model_dump() 输出，
+                          含 daily_basic、fina_indicator、income 三个 list[dict]
+
+    Returns:
+        包含 pe_ttm/pe_percentile_1y/roe_yearly/tr_yoy/netprofit_yoy 的 dict。
+        不可计算的指标为 None。
+    """
+    result = {
+        "pe_ttm": None,
+        "pe_percentile_1y": None,
+        "roe_yearly": None,
+        "tr_yoy": None,
+        "netprofit_yoy": None,
+    }
+
+    # PE_TTM 百分位（从 daily_basic）
+    daily_basic = fundamental_data.get("daily_basic", [])
+    if daily_basic:
+        pe_values = [(r.get("trade_date", ""), r.get("pe_ttm")) for r in daily_basic if r.get("pe_ttm") is not None]
+        if pe_values:
+            pe_values.sort(key=lambda x: x[0], reverse=True)
+            latest_pe = pe_values[0][1]
+            pe_list = [v[1] for v in pe_values]
+            rank = sum(1 for p in pe_list if p < latest_pe)
+            percentile = round(rank / len(pe_list) * 100, 2)
+            result["pe_ttm"] = latest_pe
+            result["pe_percentile_1y"] = percentile
+
+    # 财务指标（从 fina_indicator）
+    fina = fundamental_data.get("fina_indicator", [])
+    if fina:
+        sorted_fina = sorted(fina, key=lambda r: r.get("end_date", ""), reverse=True)
+        latest = sorted_fina[0]
+        result["roe_yearly"] = latest.get("roe_yearly")
+        result["tr_yoy"] = latest.get("tr_yoy")
+        result["netprofit_yoy"] = latest.get("netprofit_yoy")
+
+    return result
+
+
 def _last_value(series: pd.Series | None) -> float | None:
     """取 Series 最后一个非 NaN 值。pandas-ta 数据不足时返回 None。"""
     if series is None:
@@ -65,8 +109,10 @@ def _last_value(series: pd.Series | None) -> float | None:
     return float(valid.iloc[-1])
 
 
-def _value_at(series: pd.Series, pos: int) -> float | None:
+def _value_at(series: pd.Series | None, pos: int) -> float | None:
     """取 Series 指定位置的最后一个非 NaN 值"""
+    if series is None:
+        return None
     valid = series.dropna()
     idx = len(valid) + pos  # pos 是负数，如 -2 表示倒数第二个
     if idx < 0 or idx >= len(valid):

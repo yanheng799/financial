@@ -52,9 +52,70 @@ def score_technical(indicators: dict, daily_count: int) -> DimensionScore:
     vol_ratio = indicators.get("vol_ratio")
     if vol_ratio is not None and vol_ratio < config["vol_ratio"]["weaken"]:
         score = int(score * 0.5)
-        # vol_ratio >= confirm → 保持分数（放量确认）
 
     # clamp
+    score = max(-2, min(2, score))
+
+    return DimensionScore(
+        value=score,
+        reason="；".join(reasons) if reasons else "无明显信号",
+        data_sufficient=True,
+    )
+
+
+def score_fundamental(indicators: dict, has_fundamental: bool) -> DimensionScore:
+    """基本面评分：PE 分位数 + ROE + 成长趋势。
+
+    Args:
+        indicators: compute_fundamental_indicators() 的输出
+        has_fundamental: 是否有财报数据（fina_indicator 非空）
+
+    Returns:
+        DimensionScore（value 在 -2~+2）
+    """
+    config = load_scoring_config()
+
+    # 完全无财务数据
+    if not has_fundamental:
+        return DimensionScore(value=0, reason="暂无财务数据", data_sufficient=False)
+
+    score = 0
+    reasons = []
+
+    # 估值位置
+    pe_percentile = indicators.get("pe_percentile_1y")
+    if pe_percentile is not None:
+        if pe_percentile < config["pe"]["low_percentile"]:
+            score += 1
+            reasons.append("PE处于近一年低位")
+        elif pe_percentile >= config["pe"]["high_percentile"]:
+            score -= 1
+            reasons.append("PE处于近一年高位")
+
+    # 盈利能力
+    roe = indicators.get("roe_yearly")
+    if roe is not None:
+        roe_pct = roe * 100 if roe < 1 else roe  # 兼容小数和百分比两种格式
+        if roe_pct > config["roe"]["high"]:
+            score += 1
+            reasons.append("ROE优秀(>15%)")
+        elif roe_pct < config["roe"]["low"]:
+            score -= 1
+            reasons.append("ROE偏低(<3%)")
+
+    # 成长趋势
+    tr_yoy = indicators.get("tr_yoy")
+    netprofit_yoy = indicators.get("netprofit_yoy")
+    if tr_yoy is not None and netprofit_yoy is not None:
+        tr_pct = tr_yoy * 100 if tr_yoy < 1 else tr_yoy
+        np_pct = netprofit_yoy * 100 if netprofit_yoy < 1 else netprofit_yoy
+        if tr_pct > config["yoy"]["high"] and np_pct > config["yoy"]["high"]:
+            score += 1
+            reasons.append("营收净利润双增长")
+        elif tr_pct < 0 and np_pct < 0:
+            score -= 1
+            reasons.append("营收净利润双降")
+
     score = max(-2, min(2, score))
 
     return DimensionScore(
