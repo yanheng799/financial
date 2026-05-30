@@ -1,11 +1,11 @@
-"""策略决策 Agent — ScoreEntry, DecisionReport, LLM 配置加载, 置信度计算"""
+"""策略决策 Agent — ScoreEntry, DecisionReport, LLMOutput, LLM 配置加载, 置信度计算"""
 
 import os
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ScoreEntry(BaseModel):
@@ -16,8 +16,22 @@ class ScoreEntry(BaseModel):
     confidence: Literal["determined", "insufficient", "deferred"]
 
 
+class LLMOutput(BaseModel):
+    """LLM 只需输出的 5 个推理字段。其余 7 个字段由代码注入。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    conflict_detail: str
+    overall_judgment: Literal["乐观", "中性", "谨慎", "中性偏谨慎", "中性偏乐观"]
+    key_driver: str
+    risk_warning: str
+    bearish_factor: str
+
+
 class DecisionReport(BaseModel):
-    """策略决策 Agent 输出结构"""
+    """策略决策 Agent 输出结构（12 字段：5 LLM + 7 代码注入）"""
+
+    model_config = ConfigDict(extra="ignore")
 
     symbol: str
     date: str
@@ -76,6 +90,27 @@ def load_llm_config(config_path: str | Path = "configs/llm.yaml") -> dict:
     with open(path, encoding="utf-8") as f:
         _LLM_CONFIG_CACHE = yaml.safe_load(f)
     return _LLM_CONFIG_CACHE
+
+
+def detect_conflict(scores: dict[str, Any]) -> bool:
+    """判断维度间是否存在冲突（既有正分又有负分）。零值不算方向。
+
+    data_sufficient=False 的维度不参与判断。
+    """
+    valid = {k: v for k, v in scores.items() if _get_data_sufficient(v)}
+    values = [_get_value(v) for v in valid.values()]
+    has_positive = any(v > 0 for v in values)
+    has_negative = any(v < 0 for v in values)
+    return has_positive and has_negative
+
+
+def build_data_sources(scores: dict[str, Any], dim_sources: dict[str, str]) -> list[str]:
+    """构建数据来源列表，只包含 data_sufficient=True 的维度。"""
+    return [
+        dim_sources[dim]
+        for dim, score in scores.items()
+        if _get_data_sufficient(score) and dim in dim_sources
+    ]
 
 
 def compute_confidence(scores: dict[str, Any]) -> Literal["高", "中", "低"]:

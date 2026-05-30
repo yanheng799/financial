@@ -58,6 +58,6 @@ AFK（可独立执行，无需人工决策）
 
 ## Publish Status
 
-- Status: created
+- Status: implemented
 - GitHub Number: 36
 - GitHub URL: https://github.com/yanheng799/financial/issues/36

@@ -69,13 +69,21 @@ class TestBuildPrompt:
         prompt = build_prompt(_sample_report())
         assert "overall_judgment" in prompt
         assert "bearish_factor" in prompt
-        assert "conflict_detected" in prompt
+        assert "conflict_detail" in prompt
 
-    def test_prompt_excludes_confidence_level_from_json_template(self):
+    def test_prompt_excludes_code_injected_fields(self):
+        """prompt 不再要求 LLM 输出代码注入的字段"""
         from src.strategist.node import build_prompt
 
         prompt = build_prompt(_sample_report())
-        assert "不要输出 confidence_level" in prompt
+        json_section = prompt[prompt.index("JSON"):]
+        assert "confidence_level" not in json_section
+        assert "conflict_detected" not in json_section
+        assert '"symbol"' not in json_section
+        assert '"date"' not in json_section
+        assert '"scores"' not in json_section
+        assert '"data_sources"' not in json_section
+        assert '"generated_at"' not in json_section
 
     def test_prompt_has_constraints(self):
         from src.strategist.node import build_prompt

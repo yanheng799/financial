@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime
 
 from langgraph.graph.state import StateGraph
 from langgraph.types import interrupt
@@ -9,13 +10,23 @@ from langgraph.types import interrupt
 from src.state import AnalysisState
 from src.strategist.schemas import (
     DecisionReport,
+    LLMOutput,
+    build_data_sources,
     compute_confidence,
     create_llm_client,
+    detect_conflict,
     load_llm_config,
     to_score_entry,
 )
 
 logger = logging.getLogger(__name__)
+
+# 维度名 → 数据来源映射。Phase 2 加 sentiment 时只需改此处。
+DIM_SOURCES = {
+    "technical": "Tushare daily",
+    "fundamental": "Tushare daily_basic/fina_indicator",
+    "capital": "Tushare moneyflow",
+}
 
 
 def human_review_agent(state: AnalysisState) -> dict:
@@ -66,7 +77,7 @@ def _make_error(error_type: str, message: str, detail: str = "") -> dict:
 
 
 def build_prompt(technical_report: dict) -> str:
-    """从 TechnicalReport 构造 LLM prompt。"""
+    """从 TechnicalReport 构造 LLM prompt。LLM 只需输出 5 个推理字段。"""
     scores = technical_report.get("scores", {})
     indicators = technical_report.get("indicators", {})
     symbol = technical_report.get("symbol", "")
@@ -74,13 +85,8 @@ def build_prompt(technical_report: dict) -> str:
 
     score_lines = []
     score_values = []
-    dim_sources = {
-        "technical": "Tushare daily",
-        "fundamental": "Tushare daily_basic/fina_indicator",
-        "capital": "Tushare moneyflow",
-    }
 
-    for dim_key in ["technical", "fundamental", "capital"]:
+    for dim_key in scores:
         dim = scores.get(dim_key)
         if dim is None:
             continue
@@ -90,7 +96,7 @@ def build_prompt(technical_report: dict) -> str:
         sufficient = _extract_data_sufficient(dim)
 
         conf_label = "确定性数据支撑" if sufficient else "数据不足，仅供参考"
-        source = dim_sources.get(dim_key, "")
+        source = DIM_SOURCES.get(dim_key, "")
 
         if not sufficient:
             score_lines.append(f"{_dim_name(dim_key)}：{value}（{reason}）【{conf_label}】")
@@ -125,22 +131,14 @@ def build_prompt(technical_report: dict) -> str:
 
 最大分差：{max_diff}
 
-请基于以上评分进行交叉分析，严格按照以下 JSON 格式输出：
+请基于以上评分进行交叉分析，严格按照以下 JSON 格式输出（仅输出这 5 个字段）：
 {{
-  "symbol": "{symbol}",
-  "date": "{date_str}",
-  "scores": {{ ... 回填传入的评分，confidence 用 "determined"/"insufficient" }},
-  "conflict_detected": true/false,
-  "conflict_detail": "例如：技术面+基本面偏多，资金面偏空",
+  "conflict_detail": "描述各维度间是否存在矛盾，例如：技术面+基本面偏多，资金面偏空",
   "overall_judgment": "乐观/中性/谨慎/中性偏谨慎/中性偏乐观",
   "key_driver": "哪个维度权重最大及原因",
   "risk_warning": "如果判断偏乐观，必须列出风险因素",
-  "bearish_factor": "强制输出一条最不支持当前判断的反向理由",
-  "data_sources": ["数据来源列表"],
-  "generated_at": "ISO 8601"
+  "bearish_factor": "强制输出一条最不支持当前判断的反向理由"
 }}
-
-注意：不要输出 confidence_level，该字段由代码注入。
 
 规则：
 1. 仅基于提供的数据进行分析，不要编造未提供的信息
@@ -152,6 +150,13 @@ def build_prompt(technical_report: dict) -> str:
 
 
 def strategy_decider_agent(state: AnalysisState) -> dict:
+    """策略决策节点：LLM 输出 5 个推理字段 → 代码注入 7 个确定性字段 → DecisionReport。
+
+    重试分工：
+    - SDK 层（ChatOpenAI max_retries=2）：处理网络超时/HTTP 429，最多 3 次调用
+    - 应用层（attempt range(2)）：处理 JSON 解析/LLMOutput schema 校验失败，最多 2 次调用
+    两类错误互不交叉。
+    """
     technical_report = state.get("technical_report")
     if not technical_report:
         return {"error": _make_error("input", "technical_report 为空，请先执行行情分析 Agent")}
@@ -167,8 +172,15 @@ def strategy_decider_agent(state: AnalysisState) -> dict:
     if all_insufficient:
         return {"error": _make_error("input", "所有维度均数据不足，无法进行策略分析")}
 
+    # 代码计算的 7 个确定性值
     confidence_level = compute_confidence(scores)
     entries = {dim: to_score_entry(s) for dim, s in scores.items()}
+    conflict_detected = detect_conflict(scores)
+    symbol = technical_report.get("symbol", "")
+    date_str = technical_report.get("date", "")
+    data_sources = build_data_sources(scores, DIM_SOURCES)
+    generated_at = datetime.now().isoformat()
+
     prompt = build_prompt(technical_report)
 
     try:
@@ -192,22 +204,36 @@ def strategy_decider_agent(state: AnalysisState) -> dict:
                 continue
             return {"error": _make_error("llm_parse_error", "LLM 返回非 JSON，重试后仍失败", detail=raw[:200])}
 
-        # 注入代码计算的值 (must happen before Pydantic validation)
-        data["confidence_level"] = confidence_level
-        data["scores"] = {
-            dim: e.model_dump() if hasattr(e, "model_dump") else {"value": e.value, "reason": e.reason, "confidence": e.confidence}
-            for dim, e in entries.items()
-        }
-
-        # Validate
+        # Validate with LLMOutput (5 fields only)
         try:
-            report = DecisionReport.model_validate(data)
+            llm_output = LLMOutput.model_validate(data)
         except Exception as e:
             if attempt == 0:
                 prompt += f"\n\n【重要】上一次输出不符合 schema: {e}。请严格按 JSON 模板输出。"
                 continue
             return {"error": _make_error("llm_parse_error", f"LLM 输出不符合 schema: {e}", detail=raw[:200])}
 
+        # Merge LLM output (5 fields) + code-injected values (7 fields) → DecisionReport
+        report_data = {
+            "symbol": symbol,
+            "date": date_str,
+            "scores": {
+                dim: e.model_dump() if hasattr(e, "model_dump") else {"value": e.value, "reason": e.reason, "confidence": e.confidence}
+                for dim, e in entries.items()
+            },
+            "conflict_detected": conflict_detected,
+            "confidence_level": confidence_level,
+            "data_sources": data_sources,
+            "generated_at": generated_at,
+            # LLM 推理字段
+            "conflict_detail": llm_output.conflict_detail,
+            "overall_judgment": llm_output.overall_judgment,
+            "key_driver": llm_output.key_driver,
+            "risk_warning": llm_output.risk_warning,
+            "bearish_factor": llm_output.bearish_factor,
+        }
+
+        report = DecisionReport.model_validate(report_data)
         return {"decision_report": report.model_dump()}
 
     return {"error": _make_error("llm_parse_error", "LLM 输出校验失败，重试后仍失败")}
