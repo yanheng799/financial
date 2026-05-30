@@ -442,7 +442,7 @@ class TestFetchMoneyflow:
 
 
 class TestFetchAll:
-    def test_returns_raw_data_with_all_dimensions(self):
+    def test_returns_raw_data_with_all_dimensions(self, tmp_path):
         adapter, mock_pro = _create_adapter()
         mock_pro.daily.return_value = _make_daily_df()
         mock_pro.daily_basic.return_value = _make_daily_basic_df()
@@ -450,7 +450,8 @@ class TestFetchAll:
         mock_pro.income.return_value = _make_income_df()
         mock_pro.moneyflow.return_value = _make_moneyflow_df()
 
-        result = adapter.fetch_all("600519.SH")
+        with patch("src.collector.adapter._get_data_dir", return_value=tmp_path):
+            result = adapter.fetch_all("600519.SH")
 
         assert isinstance(result, RawData)
         assert len(result.daily.data) >= 1
@@ -459,7 +460,7 @@ class TestFetchAll:
         assert len(result.fundamental.income) >= 1
         assert result.capital.insufficient is False
 
-    def test_moneyflow_degrades_gracefully(self):
+    def test_moneyflow_degrades_gracefully(self, tmp_path):
         adapter, mock_pro = _create_adapter()
         mock_pro.daily.return_value = _make_daily_df()
         mock_pro.daily_basic.return_value = _make_daily_basic_df()
@@ -467,7 +468,8 @@ class TestFetchAll:
         mock_pro.income.return_value = _make_income_df()
         mock_pro.moneyflow.side_effect = Exception("积分不足")
 
-        result = adapter.fetch_all("600519.SH")
+        with patch("src.collector.adapter._get_data_dir", return_value=tmp_path):
+            result = adapter.fetch_all("600519.SH")
 
         assert isinstance(result, RawData)
         assert len(result.daily.data) >= 1

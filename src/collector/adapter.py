@@ -3,10 +3,12 @@
 import json
 import os
 from datetime import date, timedelta
+from pathlib import Path
 
 import tushare as ts
 
 from src.collector.schemas import CapitalFlowData, DailyQuoteData, FundData, RawData
+from src.collector.storage import is_cached, load, save_all
 
 
 def calc_date_range(years: int = 0, quarters: int = 0) -> tuple[str, str]:
@@ -203,15 +205,31 @@ class TushareAdapter:
         )
         return CapitalFlowData(data=rows, insufficient=False)
 
-    def fetch_all(self, ts_code: str) -> RawData:
-        """一次性拉取全部 5 个接口数据，返回 RawData。moneyflow 失败时降级。"""
+    def fetch_all(self, ts_code: str, force_refresh: bool = False) -> RawData:
+        """一次性拉取全部 5 个接口数据，返回 RawData。
+
+        本地缓存优先：已有完整 Parquet 文件时直接读取，不调 API。
+        force_refresh=True 时忽略缓存，全量重拉并覆盖。
+
+        Args:
+            ts_code: 股票代码（已标准化，如 '600519.SH'）
+            force_refresh: 是否强制刷新（忽略本地缓存）
+
+        Returns:
+            RawData——按三维拆分的完整原始数据
+        """
+        data_dir = _get_data_dir()
+
+        if not force_refresh and is_cached(ts_code, data_dir):
+            return load(ts_code, data_dir)
+
         daily = self.fetch_daily(ts_code)
         daily_basic = self.fetch_daily_basic(ts_code)
         fina_indicator = self.fetch_fina_indicator(ts_code)
         income = self.fetch_income(ts_code)
         capital = self.fetch_moneyflow(ts_code)
 
-        return RawData(
+        raw = RawData(
             daily=daily,
             fundamental=FundData(
                 daily_basic=daily_basic,
@@ -220,3 +238,11 @@ class TushareAdapter:
             ),
             capital=capital,
         )
+
+        save_all(raw, data_dir)
+        return raw
+
+
+def _get_data_dir() -> Path:
+    """返回数据存储根目录，默认为项目根目录下的 data/。"""
+    return Path("data")
