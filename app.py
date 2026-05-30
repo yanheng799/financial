@@ -3,6 +3,10 @@
 import glob
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # 加载 .env 中的 TUSHARE_TOKEN / DEEPSEEK_API_KEY 等环境变量
+
 import pandas as pd
 import streamlit as st
 
